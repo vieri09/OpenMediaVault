@@ -1,0 +1,29 @@
+{
+  "name": "openmedia",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A self-hosted, browser-based music player that plays from a local folder. Inspired by Monochrome.",
+  "license": "MIT",
+  "type": "module",
+  "workspaces": [
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "dev": "concurrently -n server,client -c blue,magenta \"npm:dev:server\" \"npm:dev:client\"",
+    "dev:server": "npm run dev --workspace server",
+    "dev:client": "npm run dev --workspace client",
+    "build": "npm run build --workspace client && npm run typecheck --workspace server",
+    "start": "npm run start --workspace server",
+    "lint": "npm run lint --workspace server && npm run lint --workspace client",
+    "typecheck": "npm run typecheck --workspace server && npm run typecheck --workspace client",
+    "test": "npm run test --workspace server",
+    "rescan": "node --input-type=module -e \"fetch(process.env.APP_URL||'http://localhost:3000').then(r=>r.ok?fetch('http://localhost:3000/api/rescan',{method:'POST'}):0).then(r=>r&&r.json()).then(d=>console.log(d)).catch(e=>{console.error(e);process.exit(1)})\""
+  },
+  "devDependencies": {
+    "concurrently": "^9.1.2"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
