@@ -1,4 +1,4 @@
-# OpenMedia
+# OpenMediaVault
 
 A self-hosted, browser-based music player that streams from a folder on your own
 machine. Dark, minimalist, keyboard-driven, and **private by design** — there is

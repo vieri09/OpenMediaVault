@@ -1,5 +1,5 @@
 {
-  "name": "openmedia",
+  "name": "openmedia-vault",
   "version": "1.0.0",
   "private": true,
   "description": "A self-hosted, browser-based music player that plays from a local folder. Inspired by Monochrome.",
