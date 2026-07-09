@@ -19,7 +19,9 @@
   --radius: 10px;
   --radius-sm: 7px;
   --radius-lg: 16px;
-  --player-h: 88px;
+  --player-h: 90px;
+  --player-h-mobile: 124px;
+  --player-margin: 12px;
   --sidebar-w: 220px;
   --font: -apple-system, BlinkMacSystemFont, 'Inter', 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
   --mono: 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
@@ -86,8 +88,10 @@ select {
 /* ── Layout ─────────────────────────────────────────────────────── */
 .app {
   display: grid;
+  /* Mirrors Monochrome's app-container: a fixed sidebar column plus a fluid
+     main column. The player floats (position: fixed) over the main area, so it
+     is not a grid row — it is anchored to the right of the sidebar. */
   grid-template-columns: var(--sidebar-w) 1fr;
-  grid-template-rows: 1fr var(--player-h);
   height: 100vh;
   height: 100dvh;
 }
@@ -135,22 +139,31 @@ select {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 9px 12px;
+  padding: 10px 12px;
   min-width: 0;
   overflow: hidden;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius);
   color: var(--text-muted);
   font-weight: 500;
   white-space: nowrap;
-  transition: background 0.12s, color 0.12s;
+  transition: background 0.15s, color 0.15s, transform 0.15s;
 }
 .nav-link:hover {
   background: var(--bg-hover);
   color: var(--text);
+  transform: translateX(4px);
+}
+.nav-link:disabled {
+  opacity: 0.6;
+  cursor: default;
+  transform: none;
 }
 .nav-link.active {
-  background: var(--bg-active);
-  color: var(--text);
+  background: var(--accent-strong);
+  color: var(--bg);
+}
+.nav-link.active:hover {
+  transform: none;
 }
 .nav-label {
   min-width: 0;
@@ -163,6 +176,7 @@ select {
   grid-row: 1;
   overflow-y: auto;
   position: relative;
+  padding-bottom: calc(var(--player-h) + var(--player-margin) * 2 + 12px);
 }
 
 .content {
@@ -490,60 +504,106 @@ tr.row.playing .row-actions {
 }
 
 /* ── Player bar ─────────────────────────────────────────────────── */
+/* Floating bar that lives in the main content area, to the right of the
+   sidebar — mirroring Monochrome's now-playing-bar (which uses
+   left: calc(190px + 2%); width: calc(96% - 190px)). Anchoring it past the
+   sidebar is what keeps it from overlapping the side menu. */
 .player {
-  grid-column: 1 / -1;
-  grid-row: 2;
-  background: var(--bg-elevated);
-  border-top: 1px solid var(--border);
-  display: grid;
-  grid-template-columns: 1fr 2fr 1fr;
-  align-items: center;
-  padding: 0 20px;
-  gap: 16px;
+  position: fixed;
+  bottom: var(--player-margin);
+  left: calc(var(--sidebar-w) + var(--player-margin));
+  width: calc(100% - var(--sidebar-w) - var(--player-margin) * 2);
   height: var(--player-h);
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.6fr) minmax(0, 1fr);
+  align-items: center;
+  gap: 16px;
+  padding: 0 18px;
+  background: color-mix(in srgb, var(--bg-elevated) 88%, transparent);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 8px 40px rgba(0, 0, 0, 0.45);
+  z-index: 50;
+  animation: player-slide-up 0.4s cubic-bezier(0.34, 1.56, 0.64, 1);
 }
-.player-now {
+
+@keyframes player-slide-up {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Left column — cover + title/artist + favorite */
+.track-info {
   display: flex;
   align-items: center;
   gap: 12px;
   min-width: 0;
 }
 .player-thumb {
-  width: 56px;
-  height: 56px;
+  width: 52px;
+  height: 52px;
   border-radius: 8px;
   object-fit: cover;
   background: var(--surface);
   flex-shrink: 0;
 }
-.player-info {
+.details {
   min-width: 0;
+  flex: 1;
 }
-.player-info .t {
+.details .title {
   font-weight: 600;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.player-info .a {
+.details .artist {
   color: var(--text-muted);
   font-size: 12.5px;
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
-.player-center {
+
+/* Center column — progress on top, transport buttons below (Monochrome
+   stacks these, putting the progress row above the buttons via order: -1). */
+.player-controls {
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: 6px;
+  gap: 2px;
+  min-width: 0;
 }
-.player-controls {
+.progress-container {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 10px;
+  width: 100%;
+  max-width: 480px;
+  order: -1;
 }
-.player-controls .btn-icon {
+.progress-container .time {
+  color: var(--text-faint);
+  font-size: 11.5px;
+  font-variant-numeric: tabular-nums;
+  width: 38px;
+  text-align: center;
+  flex-shrink: 0;
+}
+.player-buttons {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.player-buttons .btn-icon {
   width: 34px;
   height: 34px;
 }
@@ -551,27 +611,15 @@ tr.row.playing .row-actions {
   width: 40px;
   height: 40px;
   background: var(--accent-strong);
-  color: #0d0d0f;
+  color: var(--bg);
 }
 .btn-play:hover {
   background: #fff;
-  color: #0d0d0f;
+  color: var(--bg);
 }
-.seekbar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  width: 100%;
-  max-width: 560px;
-}
-.seekbar .time {
-  color: var(--text-faint);
-  font-size: 11.5px;
-  font-variant-numeric: tabular-nums;
-  width: 38px;
-  text-align: center;
-}
-.player-right {
+
+/* Right column — volume + queue / now-playing actions */
+.player-actions {
   display: flex;
   align-items: center;
   gap: 4px;
@@ -580,7 +628,7 @@ tr.row.playing .row-actions {
 .volume {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 .volume input[type='range'] {
   width: 90px;
@@ -591,33 +639,50 @@ input[type='range'] {
   -webkit-appearance: none;
   appearance: none;
   height: 4px;
-  background: var(--border-strong);
+  background: linear-gradient(
+    to right,
+    var(--accent-strong) 0%,
+    var(--accent-strong) var(--slider-progress, 0%),
+    var(--border-strong) var(--slider-progress, 0%),
+    var(--border-strong) 100%
+  );
   border-radius: 4px;
   outline: none;
   cursor: pointer;
   flex: 1;
+  transition: height 0.15s;
+}
+input[type='range']:hover {
+  height: 6px;
 }
 input[type='range']::-webkit-slider-thumb {
   -webkit-appearance: none;
   appearance: none;
-  width: 13px;
-  height: 13px;
+  width: 11px;
+  height: 11px;
   border-radius: 50%;
   background: var(--accent-strong);
   border: none;
-  opacity: 0;
-  transition: opacity 0.12s;
+  opacity: 0.7;
+  transition: opacity 0.15s, width 0.15s, height 0.15s;
 }
 input[type='range']:hover::-webkit-slider-thumb,
 input[type='range']:active::-webkit-slider-thumb {
   opacity: 1;
-}
-input[type='range']::-moz-range-thumb {
   width: 13px;
   height: 13px;
+}
+input[type='range']::-moz-range-thumb {
+  width: 11px;
+  height: 11px;
   border-radius: 50%;
   background: var(--accent-strong);
   border: none;
+}
+input[type='range']::-moz-range-progress {
+  background: var(--accent-strong);
+  height: 4px;
+  border-radius: 4px;
 }
 
 /* ── Queue panel ────────────────────────────────────────────────── */
@@ -638,7 +703,7 @@ input[type='range']::-moz-range-thumb {
   position: fixed;
   right: 0;
   top: 0;
-  bottom: var(--player-h);
+  bottom: 0;
   width: 380px;
   max-width: 92vw;
   background: var(--bg-elevated);
@@ -897,29 +962,206 @@ input[type='range']::-moz-range-thumb {
     transform: rotate(360deg);
   }
 }
-.now-playing-hero {
+/* ── Now Playing (immersive) ────────────────────────────────────── */
+/* Modeled on Monochrome's fullscreen overlay: a single centered media
+   column over a blurred copy of the cover art. While this route is open the
+   floating mini-player is hidden, so this view is the sole control surface. */
+.np-view {
+  position: relative;
+  min-height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px 24px calc(var(--player-margin) + 24px);
+  overflow: hidden;
+  background: var(--bg);
+}
+.np-backdrop {
+  position: absolute;
+  inset: -12%;
+  background-size: cover;
+  background-position: center;
+  filter: blur(64px) saturate(1.4) brightness(0.55);
+  transform: scale(1.2);
+  z-index: 0;
+}
+.np-backdrop-shade {
+  position: absolute;
+  inset: 0;
+  background:
+    radial-gradient(circle at 50% 38%, rgba(255, 255, 255, 0.06), transparent 60%),
+    linear-gradient(180deg, rgba(13, 13, 15, 0.5), rgba(13, 13, 15, 0.82));
+  z-index: 0;
+}
+.np-back {
+  position: absolute;
+  top: 18px;
+  left: 18px;
+  z-index: 3;
+  background: rgba(0, 0, 0, 0.3);
+  backdrop-filter: blur(8px);
+}
+.np-media {
+  position: relative;
+  z-index: 1;
+  width: min(440px, 100%);
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 24px;
-  padding: 30px 0 20px;
+  gap: 18px;
 }
-.np-cover {
-  width: min(360px, 60vw);
-  aspect-ratio: 1;
-  border-radius: var(--radius-lg);
-  object-fit: cover;
+.np-artwork {
+  width: 100%;
+  aspect-ratio: 1 / 1;
+  border-radius: 18px;
+  overflow: hidden;
   background: var(--surface);
-  box-shadow: var(--shadow);
+  box-shadow: 0 28px 80px rgba(0, 0, 0, 0.5);
+}
+.np-artwork img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.np-artwork-fallback {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  place-items: center;
+  color: var(--text-faint);
+}
+.np-info {
+  text-align: left;
+  min-width: 0;
 }
 .np-title {
-  font-size: 24px;
+  margin: 0;
+  font-size: clamp(1.3rem, 2.5vw, 1.7rem);
   font-weight: 700;
-  text-align: center;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .np-artist {
+  margin-top: 4px;
   color: var(--text-muted);
+  font-size: 0.95rem;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.np-album {
+  color: var(--text-faint);
+}
+.np-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 12px;
+}
+.np-actions .btn-icon {
+  color: rgba(236, 236, 238, 0.8);
+}
+.np-actions .btn-icon:hover {
+  color: var(--text);
+}
+.np-upnext {
+  margin-top: 14px;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  font-size: 0.8rem;
+  color: var(--text-faint);
+  min-width: 0;
+}
+.np-upnext .label {
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.7rem;
+  flex-shrink: 0;
+}
+.np-upnext .value {
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.np-controls {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+.np-progress {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--text-faint);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+.np-progress .time {
+  width: 38px;
   text-align: center;
+  flex-shrink: 0;
+}
+.np-buttons {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: clamp(12px, 4vw, 28px);
+}
+.np-buttons .btn-icon {
+  width: 44px;
+  height: 44px;
+  color: var(--text);
+  transition: transform 0.15s, background 0.15s, color 0.15s;
+}
+.np-buttons .btn-icon:hover {
+  background: rgba(255, 255, 255, 0.1);
+  transform: scale(1.12);
+}
+.np-buttons .btn-icon:active {
+  transform: scale(0.95);
+}
+.np-play {
+  width: 64px;
+  height: 64px;
+  border-radius: 50%;
+  background: var(--accent-strong);
+  color: var(--bg);
+  display: grid;
+  place-items: center;
+  transition: transform 0.15s, background 0.15s;
+}
+.np-play:hover {
+  background: #fff;
+  transform: scale(1.06);
+}
+.np-play:active {
+  transform: scale(0.96);
+}
+.np-volume {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 2px;
+}
+.np-volume input[type='range'] {
+  width: 150px;
+}
+
+/* The immersive Now Playing view replaces the floating mini-player. The
+   <audio> element lives outside .player, so hiding the bar keeps playback
+   alive — only the control surface is suppressed. */
+.app.on-nowplaying .player {
+  display: none;
+}
+.app.on-nowplaying .main {
+  padding-bottom: 0;
 }
 kbd {
   background: var(--bg-active);
@@ -935,7 +1177,6 @@ kbd {
 @media (max-width: 820px) {
   .app {
     grid-template-columns: 1fr;
-    grid-template-rows: 1fr var(--player-h);
   }
   .sidebar {
     display: none;
@@ -943,26 +1184,44 @@ kbd {
   .content {
     padding: 22px 16px 50px;
   }
+  .main {
+    padding-bottom: calc(var(--player-h-mobile) + var(--player-margin) * 2);
+  }
   .page-title {
     font-size: 24px;
   }
+  /* Sidebar is hidden, so the floating player reclaims the full width and
+     stacks: track top-left, actions top-right, controls full-width bottom. */
   .player {
+    left: 8px;
+    width: calc(100% - 16px);
+    bottom: 8px;
+    height: var(--player-h-mobile);
     grid-template-columns: 1fr auto;
-    grid-template-areas: 'now right' 'center center';
-    padding: 8px 12px;
+    grid-template-areas:
+      'track actions'
+      'controls controls';
     gap: 4px;
+    padding: 8px 12px;
   }
-  .player-now {
-    grid-area: now;
+  .track-info {
+    grid-area: track;
   }
-  .player-right {
-    grid-area: right;
+  .player-actions {
+    grid-area: actions;
   }
-  .player-center {
-    grid-area: center;
+  .player-controls {
+    grid-area: controls;
+  }
+  .player-thumb {
+    width: 44px;
+    height: 44px;
+  }
+  .progress-container {
+    max-width: none;
   }
   .volume input[type='range'] {
-    display: none;
+    width: 64px;
   }
   .detail-cover,
   .detail-cover-fallback {

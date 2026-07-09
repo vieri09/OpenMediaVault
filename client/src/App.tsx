@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { NavLink, Outlet, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
   Disc3,
   Library,
@@ -20,7 +20,12 @@ import { useMediaSession } from './hooks/useMediaSession.ts';
 export default function App() {
   const searchRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
+  const location = useLocation();
   const togglePalette = useUI((s) => s.togglePalette);
+
+  // While the immersive Now Playing view is open it becomes the sole control
+  // surface, so the floating mini-player is hidden via this class.
+  const onNowPlaying = location.pathname === '/nowplaying';
 
   useKeyboard(searchRef);
   useMediaSession();
@@ -35,7 +40,7 @@ export default function App() {
     `nav-link ${isActive ? 'active' : ''}`;
 
   return (
-    <div className="app">
+    <div className={`app${onNowPlaying ? ' on-nowplaying' : ''}`}>
       <aside className="sidebar">
         <div className="brand">
           <span className="brand-mark">

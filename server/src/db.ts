@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import fs from 'node:fs';
 import path from 'node:path';
+import { albumKey } from './keys.ts';
 import type {
   Album,
   AlbumDetail,
@@ -127,6 +128,45 @@ export class LibraryDatabase {
     this.db.pragma('synchronous = NORMAL');
     this.db.exec(SCHEMA);
     this.prepareStatements();
+    this.migrate();
+  }
+
+  /**
+   * Versioned, idempotent data migrations. Runs on every open. Each step is
+   * gated by a meta key so it executes exactly once per database file.
+   *
+   * `album_key_version` recomputes every track's album_key from its stored
+   * album title using the current (title-only) formula. This is needed because
+   * grouping is a pure function of the title, and incremental scans skip
+   * unchanged files — so a rescan alone can't repair keys produced by an older
+   * formula (or by the old title+artist formula that fragmented soundtracks).
+   */
+  private static readonly ALBUM_KEY_VERSION = '2';
+
+  private migrate(): void {
+    if (this.getMeta('album_key_version') !== LibraryDatabase.ALBUM_KEY_VERSION) {
+      this.recomputeAlbumKeys();
+      this.setMeta('album_key_version', LibraryDatabase.ALBUM_KEY_VERSION);
+    }
+  }
+
+  /**
+   * Recompute every track's album_key from its stored album title. Returns the
+   * number of rows updated. Safe to call any time; the result is identical for
+   * rows already keyed correctly.
+   */
+  recomputeAlbumKeys(): number {
+    const rows = this.db.prepare('SELECT id, album FROM tracks').all() as {
+      id: string;
+      album: string;
+    }[];
+    if (rows.length === 0) return 0;
+    const update = this.db.prepare('UPDATE tracks SET album_key = ? WHERE id = ?');
+    const tx = this.db.transaction((items: { id: string; key: string }[]) => {
+      for (const it of items) update.run(it.key, it.id);
+    });
+    tx(rows.map((r) => ({ id: r.id, key: albumKey(r.album) })));
+    return rows.length;
   }
 
   // ── prepared statements ──────────────────────────────────────────
@@ -281,7 +321,9 @@ export class LibraryDatabase {
       SELECT
         album_key AS id,
         COALESCE(NULLIF(album,''),'Unknown Album') AS title,
-        COALESCE(NULLIF(effective_artist,''),'Unknown Artist') AS albumArtist,
+        CASE WHEN COUNT(DISTINCT effective_artist) > 1 THEN 'Various Artists'
+             ELSE COALESCE(NULLIF(MAX(effective_artist),''),'Unknown Artist')
+        END AS albumArtist,
         MAX(year) AS year,
         MAX(NULLIF(genre,'')) AS genre,
         COUNT(*) AS trackCount,
@@ -321,7 +363,7 @@ export class LibraryDatabase {
     const inner = this.albumSelect(whereSql);
     const total = (this.db.prepare(`SELECT COUNT(*) AS n FROM (${inner})`).get(params) as { n: number }).n;
     const rows = this.db
-      .prepare(`SELECT * FROM (${inner}) AS a ORDER BY ${sort} ${order} LIMIT @limit OFFSET @offset`)
+      .prepare(`SELECT * FROM (${inner}) AS a ORDER BY ${sort} ${order}, title COLLATE NOCASE ASC LIMIT @limit OFFSET @offset`)
       .all({ ...params, limit, offset }) as (Omit<Album, 'hasCover'> & { hasCover: number })[];
 
     const items: Album[] = rows.map((r) => ({

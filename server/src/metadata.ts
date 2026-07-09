@@ -62,7 +62,7 @@ export async function parseTrack(absPath: string, relPath: string): Promise<Pars
     format,
     size: stat?.size ?? 0,
     mtime: stat?.mtimeMs ?? 0,
-    album_key: albumKey(album, effArtist),
+    album_key: albumKey(album),
     artist_key: artistKey(effArtist),
     effective_artist: effArtist,
     date_added: 0, // filled by scanner on first insert

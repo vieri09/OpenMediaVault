@@ -138,7 +138,8 @@ export default function Player() {
         preload="metadata"
       />
       <div className="player">
-        <div className="player-now">
+        {/* Left column — cover, title/artist, favorite */}
+        <div className="track-info">
           {track ? (
             <>
               {track.hasCover && !thumbError ? (
@@ -153,9 +154,9 @@ export default function Player() {
                   <Play size={18} />
                 </div>
               )}
-              <div className="player-info">
-                <div className="t">{track.title}</div>
-                <div className="a">{track.artist || 'Unknown Artist'}</div>
+              <div className="details">
+                <div className="title">{track.title}</div>
+                <div className="artist">{track.artist || 'Unknown Artist'}</div>
               </div>
               <button
                 className={`btn-icon ${fav ? 'active' : ''}`}
@@ -171,16 +172,32 @@ export default function Player() {
               <div className="player-thumb" style={{ display: 'grid', placeItems: 'center', color: 'var(--text-faint)' }}>
                 <Play size={18} />
               </div>
-              <div className="player-info">
-                <div className="t" style={{ color: 'var(--text-muted)' }}>Nothing playing</div>
-                <div className="a">Pick something from your library</div>
+              <div className="details">
+                <div className="title" style={{ color: 'var(--text-muted)' }}>Nothing playing</div>
+                <div className="artist">Pick something from your library</div>
               </div>
             </>
           )}
         </div>
 
-        <div className="player-center">
-          <div className="player-controls">
+        {/* Center column — progress on top, transport buttons below */}
+        <div className="player-controls">
+          <div className="progress-container">
+            <span className="time">{formatTime(currentTime)}</span>
+            <input
+              type="range"
+              min={0}
+              max={duration || 0}
+              step={0.1}
+              value={Math.min(currentTime, duration || 0)}
+              onChange={onScrub}
+              disabled={!track}
+              aria-label="Seek"
+              style={{ '--slider-progress': `${duration > 0 ? (Math.min(currentTime, duration) / duration) * 100 : 0}%` } as React.CSSProperties}
+            />
+            <span className="time">{formatTime(duration)}</span>
+          </div>
+          <div className="player-buttons">
             <button
               className={`btn-icon ${shuffle ? 'active' : ''}`}
               onClick={toggleShuffle}
@@ -213,23 +230,10 @@ export default function Player() {
               {repeat === 'one' ? <Repeat1 size={17} /> : <Repeat size={17} />}
             </button>
           </div>
-          <div className="seekbar">
-            <span className="time">{formatTime(currentTime)}</span>
-            <input
-              type="range"
-              min={0}
-              max={duration || 0}
-              step={0.1}
-              value={Math.min(currentTime, duration || 0)}
-              onChange={onScrub}
-              disabled={!track}
-              aria-label="Seek"
-            />
-            <span className="time">{formatTime(duration)}</span>
-          </div>
         </div>
 
-        <div className="player-right">
+        {/* Right column — volume + queue / now playing */}
+        <div className="player-actions">
           <div className="volume">
             <button className="btn-icon" onClick={toggleMute} title="Mute (M)" aria-label="Mute">
               <VolIcon size={18} />
@@ -242,6 +246,7 @@ export default function Player() {
               value={muted ? 0 : volume}
               onChange={(e) => setVolume(Number.parseFloat(e.target.value))}
               aria-label="Volume"
+              style={{ '--slider-progress': `${(muted ? 0 : volume) * 100}%` } as React.CSSProperties}
             />
           </div>
           <button className="btn-icon" onClick={toggleQueue} title="Queue (Q)" aria-label="Queue">

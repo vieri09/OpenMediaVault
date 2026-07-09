@@ -88,6 +88,24 @@ describe('LibraryDatabase', () => {
     expect(one.coverTrackId).toBe('1');
   });
 
+  it('groups an album by title even when album_artist differs per track', () => {
+    // Soundtrack/compilation case: one album, but each track's `albumartist`
+    // tag is a different performer (and one is missing). Title-only grouping
+    // must keep it as a single album rather than shattering per performer.
+    db.upsertTrack(row({ id: '1', album: 'OST', album_artist: 'Performer A', album_key: 'stale-1', artist_key: 'a', effective_artist: 'Performer A', track_no: 1, has_cover: 1 }));
+    db.upsertTrack(row({ id: '2', album: 'OST', album_artist: 'Performer B', album_key: 'stale-2', artist_key: 'b', effective_artist: 'Performer B', track_no: 2 }));
+    db.upsertTrack(row({ id: '3', album: 'OST', album_artist: '', album_key: 'stale-3', artist_key: 'c', effective_artist: 'Performer C', track_no: 3 }));
+
+    // The version-gated migration fixes up stale keys via this method.
+    db.recomputeAlbumKeys();
+
+    const albums = db.listAlbums({ sort: 'title', order: 'asc' }).items;
+    expect(albums).toHaveLength(1);
+    expect(albums[0].title).toBe('OST');
+    expect(albums[0].trackCount).toBe(3);
+    expect(albums[0].coverTrackId).toBe('1');
+  });
+
   it('groups artists and counts albums/tracks', () => {
     db.upsertTrack(row({ id: '1', album_key: 'a1', artist_key: 'x', effective_artist: 'X' }));
     db.upsertTrack(row({ id: '2', album_key: 'a2', artist_key: 'x', effective_artist: 'X' }));

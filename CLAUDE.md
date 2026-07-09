@@ -18,6 +18,8 @@ npm run dev:client   # Client only (Vite dev server)
 
 Tests live in `server/test/`. Scanner/API integration tests generate tiny MP3s with `ffmpeg` — those tests auto-skip if `ffmpeg` is not on `$PATH` (pure-logic tests still run). Vitest pool: `forks`. Config: `server/vitest.config.ts`.
 
+To run a single test file: `npx vitest run server/test/paths.test.ts` (from repo root). To run a specific test pattern: `npx vitest run -t "pattern" server/test/db.test.ts`.
+
 ## Architecture
 
 **Monorepo** (npm workspaces) — two packages under `server/` and `client/`. All scripts run from the repo root.
