@@ -63,7 +63,7 @@ export default function AlbumDetail() {
       <div style={{ marginTop: 24, color: 'var(--text-faint)', fontSize: 12, display: 'flex', alignItems: 'center', gap: 8 }}>
         <Clock3 size={13} /> Tip: double-click any track to play the album from there.
         {' '}
-        <Link to="/nowplaying" style={{ color: 'var(--text-muted)' }}>Open Now Playing →</Link>
+        <Link to="/music/nowplaying" style={{ color: 'var(--text-muted)' }}>Open Now Playing →</Link>
       </div>
     </div>
   );

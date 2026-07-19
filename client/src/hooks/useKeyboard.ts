@@ -57,7 +57,7 @@ export function useKeyboard(searchRef: React.RefObject<HTMLInputElement | null>)
           searchRef.current.focus();
           searchRef.current.select();
         } else {
-          navigate('/search');
+          navigate('/music/search');
         }
         return;
       }

@@ -253,7 +253,7 @@ export default function Player() {
             <ListMusic size={18} />
           </button>
           {track && (
-            <Link to="/nowplaying" className="btn-icon" title="Now playing" aria-label="Now playing">
+            <Link to="/music/nowplaying" className="btn-icon" title="Now playing" aria-label="Now playing">
               <Maximize2 size={17} />
             </Link>
           )}

@@ -9,7 +9,7 @@ export default function Genres() {
   const { data: genres, error } = useSWR<Genre[]>('/api/genres', api.genres);
 
   const openGenre = (name: string): void => {
-    navigate(`/songs?genre=${encodeURIComponent(name)}`);
+    navigate(`/music/songs?genre=${encodeURIComponent(name)}`);
     // Songs page doesn't filter by query param yet; route to songs for now.
   };
 

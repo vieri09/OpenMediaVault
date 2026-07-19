@@ -2,7 +2,6 @@ import { ListMusic, Heart, Play, Plus } from 'lucide-react';
 import type { Track } from '../types.ts';
 import { usePlayer } from '../stores/player.ts';
 import { useLibrary } from '../stores/library.ts';
-import { coverUrl } from '../api.ts';
 import { formatTime } from '../lib/format.ts';
 import { Cover } from './Cover.tsx';
 
@@ -12,6 +11,8 @@ interface TrackListProps {
   showAlbum?: boolean;
   /** Whether to show the index column. */
   showIndex?: boolean;
+  /** Number added to displayed row positions when the parent is paginated. */
+  indexOffset?: number;
   emptyMessage?: string;
 }
 
@@ -19,7 +20,13 @@ interface TrackListProps {
  * Reusable track table. Double-clicking a row (or pressing the play button)
  * replaces the queue with this list starting at that track.
  */
-export function TrackList({ tracks, showAlbum = true, showIndex = true, emptyMessage }: TrackListProps) {
+export function TrackList({
+  tracks,
+  showAlbum = true,
+  showIndex = true,
+  indexOffset = 0,
+  emptyMessage,
+}: TrackListProps) {
   const playTracks = usePlayer((s) => s.playTracks);
   const playNext = usePlayer((s) => s.playNext);
   const addToQueue = usePlayer((s) => s.addToQueue);
@@ -62,22 +69,18 @@ export function TrackList({ tracks, showAlbum = true, showIndex = true, emptyMes
                       <span />
                     </span>
                   ) : (
-                    i + 1
+                    indexOffset + i + 1
                   )}
                 </td>
               )}
               <td>
                 <div className="row-title">
-                  {showAlbum ? (
-                    <img className="row-thumb" src={coverUrl(track.id)} alt="" loading="lazy" onError={(e) => (e.currentTarget.style.visibility = 'hidden')} />
-                  ) : (
-                    <Cover
-                      coverTrackId={track.id}
-                      hasCover={track.hasCover}
-                      alt=""
-                      className="row-thumb"
-                    />
-                  )}
+                  <Cover
+                    coverTrackId={track.id}
+                    hasCover={track.hasCover}
+                    alt=""
+                    className="row-thumb"
+                  />
                   <div className="row-title-text">
                     <div className={`t ${isCurrent ? 'playing-text' : ''}`}>{track.title}</div>
                     <div className="a">{track.artist || 'Unknown Artist'}</div>

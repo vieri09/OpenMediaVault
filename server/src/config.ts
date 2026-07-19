@@ -38,8 +38,12 @@ export const AUDIO_EXTENSIONS = new Set<string>([
 export interface AppConfig {
   /** Absolute path to the music library root. */
   libraryPath: string;
+  /** Optional absolute path to the local movie library. */
+  movieLibraryPath: string | null;
   /** Port the HTTP server listens on. */
   port: number;
+  /** Interface to bind. Loopback by default so the unauthenticated library stays local. */
+  host: string;
   /** Absolute path to the SQLite cache database. */
   databasePath: string;
   /** Extra audio extensions supplied via env. */
@@ -79,10 +83,17 @@ function resolveFromRoot(p: string): string {
 export function loadConfig(): AppConfig {
   const rawLibrary = process.env.MUSIC_LIBRARY_PATH ?? './music';
   const libraryPath = resolveFromRoot(rawLibrary);
+  const rawMovieLibrary = process.env.MOVIE_LIBRARY_PATH?.trim();
+  const movieLibraryPath = rawMovieLibrary ? resolveFromRoot(rawMovieLibrary) : null;
 
   const port = Number.parseInt(process.env.APP_PORT ?? '3000', 10);
   if (!Number.isFinite(port) || port <= 0 || port > 65535) {
     throw new Error(`Invalid APP_PORT "${process.env.APP_PORT}". Expected a number in 1..65535.`);
+  }
+
+  const host = (process.env.APP_HOST ?? '127.0.0.1').trim();
+  if (!host || host.length > 253 || /[\s/]/.test(host)) {
+    throw new Error(`Invalid APP_HOST "${process.env.APP_HOST}".`);
   }
 
   const rawDb = process.env.DATABASE_PATH ?? './data/library.db';
@@ -99,10 +110,19 @@ export function loadConfig(): AppConfig {
   if (fs.existsSync(libraryPath) && !fs.statSync(libraryPath).isDirectory()) {
     throw new Error(`MUSIC_LIBRARY_PATH "${libraryPath}" exists but is not a directory.`);
   }
+  if (
+    movieLibraryPath &&
+    fs.existsSync(movieLibraryPath) &&
+    !fs.statSync(movieLibraryPath).isDirectory()
+  ) {
+    throw new Error(`MOVIE_LIBRARY_PATH "${movieLibraryPath}" exists but is not a directory.`);
+  }
 
   return {
     libraryPath,
+    movieLibraryPath,
     port,
+    host,
     databasePath,
     extraExtensions: parseExtraExtensions(process.env.EXTRA_AUDIO_EXTENSIONS),
     logLevel,

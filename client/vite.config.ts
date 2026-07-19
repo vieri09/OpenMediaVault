@@ -16,6 +16,7 @@ const repoRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..'
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, repoRoot, '');
   const apiPort = env.APP_PORT || process.env.APP_PORT || '3000';
+  const appHost = env.APP_HOST || process.env.APP_HOST || '127.0.0.1';
   const apiTarget = `http://localhost:${apiPort}`;
 
   return {
@@ -27,7 +28,7 @@ export default defineConfig(({ mode }) => {
         manifest: {
           name: 'OpenMedia',
           short_name: 'OpenMedia',
-          description: 'A self-hosted music player for your local library.',
+          description: 'A self-hosted music and movie player for your local library.',
           theme_color: '#0d0d0f',
           background_color: '#0d0d0f',
           display: 'standalone',
@@ -52,19 +53,33 @@ export default defineConfig(({ mode }) => {
           ],
         },
         workbox: {
-          // Do not cache audio streams — they must always hit the backend.
+          cleanupOutdatedCaches: true,
+          clientsClaim: true,
+          skipWaiting: true,
+          // Do not cache media streams — Range and HLS requests must hit the backend.
           navigateFallback: '/index.html',
-          globPatterns: ['**/*.{js,css,html,svg,png,ico,woff2}'],
+          // Precache only the shell. Route/panel chunks are cached when first
+          // requested, avoiding an eager download of screens the user may not use.
+          globPatterns: ['**/*.{css,html,svg,png,ico,woff2}', 'assets/index-*.js'],
           runtimeCaching: [
             {
-              urlPattern: /\/api\/(stream|cover)\//,
+              urlPattern: /\/api\/(?:stream|cover)\/|\/api\/movies\/[^/]+\/(?:stream|hls)\//,
               handler: 'NetworkOnly',
+            },
+            {
+              urlPattern: /\/assets\/.*\.js$/,
+              handler: 'CacheFirst',
+              options: {
+                cacheName: 'openmedia-page-chunks',
+                expiration: { maxEntries: 30, maxAgeSeconds: 30 * 24 * 60 * 60 },
+              },
             },
           ],
         },
       }),
     ],
     server: {
+      host: appHost,
       port: 5173,
       proxy: {
         '/api': {

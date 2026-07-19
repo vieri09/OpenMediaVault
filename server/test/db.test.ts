@@ -67,6 +67,14 @@ describe('LibraryDatabase', () => {
     expect(res.items.map((t) => t.title)).toEqual(['Apple', 'Banana']);
   });
 
+  it('sorts tracks by date added without exposing internal timestamps', () => {
+    db.upsertTrack(row({ id: 'old', title: 'Old', date_added: 100 }));
+    db.upsertTrack(row({ id: 'new', title: 'New', date_added: 200 }));
+    const items = db.listTracks({ sort: 'date_added', order: 'desc' }).items;
+    expect(items.map((track) => track.id)).toEqual(['new', 'old']);
+    expect(items[0]).not.toHaveProperty('dateAdded');
+  });
+
   it('paginates tracks', () => {
     for (let i = 0; i < 25; i++) db.upsertTrack(row({ id: 't' + i, title: 'T' + i }));
     const page = db.listTracks({ sort: 'title', order: 'asc', page: 2, limit: 10 });
@@ -159,11 +167,12 @@ describe('LibraryDatabase', () => {
 
   it('reports library summary counts', () => {
     db.upsertTrack(row({ id: '1', album_key: 'a1', artist_key: 'x', effective_artist: 'X', duration: 120 }));
-    const s = db.summary('/lib', true);
+    const s = db.summary(true);
     expect(s.trackCount).toBe(1);
     expect(s.albumCount).toBe(1);
     expect(s.artistCount).toBe(1);
     expect(s.totalDurationSeconds).toBe(120);
     expect(s.configured).toBe(true);
+    expect(s).not.toHaveProperty('libraryPath');
   });
 });

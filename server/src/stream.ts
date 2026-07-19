@@ -1,9 +1,13 @@
 import fs from 'node:fs';
+import fsp from 'node:fs/promises';
 import path from 'node:path';
+import { spawn } from 'node:child_process';
 import type { Request, Response } from 'express';
 import mime from 'mime-types';
+import { parseFile } from 'music-metadata';
 import { resolveWithin } from './paths.ts';
 import { log } from './logger.ts';
+import type { TrackRow } from './db.ts';
 
 const FALLBACK_MIME: Record<string, string> = {
   flac: 'audio/flac',
@@ -17,6 +21,10 @@ const FALLBACK_MIME: Record<string, string> = {
   weba: 'audio/webm',
   wma: 'audio/x-ms-wma',
 };
+
+const codecChecks = new Map<string, Promise<boolean>>();
+const activeTranscodes = new Map<string, Promise<string>>();
+let losslessTranscodeQueue: Promise<void> = Promise.resolve();
 
 /** Best-effort content-type for an audio extension. */
 export function audioMime(absPath: string): string {
@@ -51,6 +59,143 @@ export function parseRange(rangeHeader: string | undefined, size: number): Range
     if (end < start) return null;
   }
   return { start, end, total: size };
+}
+
+/**
+ * Return whether an M4A file needs a browser-compatible rendition.
+ *
+ * M4A is only a container: it commonly contains AAC (widely supported) but can
+ * also contain ALAC (not decoded by every browser). Cache the result using
+ * the scanner's size + mtime signature so normal playback does not repeatedly
+ * parse the file header.
+ */
+async function needsM4aTranscode(absPath: string, track: TrackRow): Promise<boolean> {
+  if (track.format !== 'm4a') return false;
+
+  const key = `${absPath}:${track.size}:${Math.round(track.mtime)}`;
+  let check = codecChecks.get(key);
+  if (!check) {
+    check = parseFile(absPath, { duration: false, skipCovers: true })
+      .then((metadata) => metadata.format.codec?.toLowerCase() === 'alac')
+      .catch((err: unknown) => {
+        log.warn(`Could not inspect M4A codec for "${track.rel_path}": ${(err as Error).message}`);
+        return false;
+      });
+    codecChecks.set(key, check);
+  }
+  return check;
+}
+
+function runLosslessTranscode(source: string, target: string): Promise<void> {
+  const temporary = `${target}.part-${process.pid}`;
+  return new Promise((resolve, reject) => {
+    const ffmpeg = spawn(
+      'ffmpeg',
+      [
+        '-nostdin',
+        '-hide_banner',
+        '-loglevel', 'error',
+        '-y',
+        '-i', source,
+        '-map', '0:a:0',
+        '-vn',
+        '-c:a', 'flac',
+        '-compression_level', '8',
+        '-threads', '1',
+        '-f', 'flac',
+        temporary,
+      ],
+      { stdio: ['ignore', 'ignore', 'pipe'] },
+    );
+
+    let stderr = '';
+    ffmpeg.stderr.on('data', (chunk: Buffer) => {
+      stderr = (stderr + chunk.toString()).slice(-4096);
+    });
+    ffmpeg.on('error', (err) => {
+      void fsp.rm(temporary, { force: true });
+      reject(new Error(`Could not start ffmpeg: ${err.message}`));
+    });
+    ffmpeg.on('close', (code) => {
+      if (code !== 0) {
+        void fsp.rm(temporary, { force: true });
+        reject(new Error(`ffmpeg exited with code ${code}${stderr ? `: ${stderr.trim()}` : ''}`));
+        return;
+      }
+      fsp.rename(temporary, target).then(() => resolve(), reject);
+    });
+  });
+}
+
+/** Serialize CPU-heavy conversions so a burst of tracks cannot saturate the host. */
+function queuedLosslessTranscode(source: string, target: string): Promise<void> {
+  const queued = losslessTranscodeQueue.then(() => runLosslessTranscode(source, target));
+  losslessTranscodeQueue = queued.catch(() => {
+    // Keep the queue usable after a failed conversion; the caller gets the error.
+  });
+  return queued;
+}
+
+async function compatibleM4a(cacheRoot: string, source: string, track: TrackRow): Promise<string> {
+  await fsp.mkdir(cacheRoot, { recursive: true });
+  const filename = `${track.id}-${track.size}-${Math.round(track.mtime)}.flac`;
+  const target = path.join(cacheRoot, filename);
+
+  try {
+    if ((await fsp.stat(target)).isFile()) return filename;
+  } catch {
+    // Cache miss.
+  }
+
+  let transcode = activeTranscodes.get(target);
+  if (!transcode) {
+    transcode = (async () => {
+      log.info(`Creating browser-compatible lossless FLAC cache for "${track.rel_path}"…`);
+      await queuedLosslessTranscode(source, target);
+      log.info(`Lossless FLAC cache ready for "${track.rel_path}".`);
+
+      // A changed source gets a new signature. Remove older renditions for the
+      // same stable track ID only after the new file has completed atomically.
+      const entries = await fsp.readdir(cacheRoot);
+      await Promise.all(
+        entries
+          .filter((entry) => entry.startsWith(`${track.id}-`) && entry !== filename)
+          .map((entry) => fsp.rm(path.join(cacheRoot, entry), { force: true })),
+      );
+      return filename;
+    })().finally(() => activeTranscodes.delete(target));
+    activeTranscodes.set(target, transcode);
+  }
+  return transcode;
+}
+
+/**
+ * Stream a track directly when the browser can decode it. ALAC-in-M4A tracks
+ * are converted losslessly to FLAC once and served from a range-capable cache.
+ */
+export async function streamTrackAudio(
+  root: string,
+  cacheRoot: string,
+  track: TrackRow,
+  req: Request,
+  res: Response,
+): Promise<void> {
+  const absPath = resolveWithin(root, track.rel_path);
+  if (!(await needsM4aTranscode(absPath, track))) {
+    streamAudio(root, track.rel_path, req, res);
+    return;
+  }
+
+  try {
+    const cachedFile = await compatibleM4a(cacheRoot, absPath, track);
+    res.setHeader('X-OpenMedia-Transcoded', 'alac-to-flac-lossless');
+    streamAudio(cacheRoot, cachedFile, req, res);
+  } catch (err) {
+    log.error(`Could not create FLAC cache for "${track.rel_path}": ${(err as Error).message}`);
+    // Safari can play ALAC directly, so preserve that useful fallback when
+    // ffmpeg is unavailable instead of turning a playable request into a 500.
+    streamAudio(root, track.rel_path, req, res);
+  }
 }
 
 /**

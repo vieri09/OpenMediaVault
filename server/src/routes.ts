@@ -3,7 +3,8 @@ import fs from 'node:fs';
 import { LibraryDatabase } from './db.ts';
 import { Scanner } from './scanner.ts';
 import { readCover } from './metadata.ts';
-import { streamAudio } from './stream.ts';
+import path from 'node:path';
+import { streamTrackAudio } from './stream.ts';
 import { notFound } from './errors.ts';
 import { resolveWithin } from './paths.ts';
 import type { AppConfig } from './config.ts';
@@ -25,6 +26,12 @@ function asOrder(v: unknown): SortOrder {
   return v === 'desc' ? 'desc' : 'asc';
 }
 
+function asQuery(v: unknown, maxLength = 200): string | undefined {
+  if (typeof v !== 'string') return undefined;
+  const value = v.trim();
+  return value ? value.slice(0, maxLength) : undefined;
+}
+
 const ALBUM_SORTS = new Set<AlbumSortKey>(['title', 'artist', 'year', 'recently_added']);
 const TRACK_SORTS = new Set<TrackSortKey>(['title', 'artist', 'album', 'duration', 'date_added']);
 
@@ -38,7 +45,7 @@ export function buildRouter(svc: Services): Router {
   // Library summary + configuration status.
   router.get('/library/summary', (_req, res) => {
     const configured = svc.cfg.libraryPath.length > 0 && fs.existsSync(svc.cfg.libraryPath);
-    res.json(svc.db.summary(svc.cfg.libraryPath, configured));
+    res.json(svc.db.summary(configured));
   });
 
   // Scan status (no body needed for a GET).
@@ -70,8 +77,8 @@ export function buildRouter(svc: Services): Router {
         order: asOrder(req.query.order),
         page: asInt(req.query.page, 1, 1, 100000),
         limit: asInt(req.query.limit, 100, 1, 500),
-        search: typeof req.query.search === 'string' ? req.query.search : undefined,
-        genre: typeof req.query.genre === 'string' ? req.query.genre : undefined,
+        search: asQuery(req.query.search),
+        genre: asQuery(req.query.genre, 100),
       }),
     );
   });
@@ -87,7 +94,7 @@ export function buildRouter(svc: Services): Router {
         order: asOrder(req.query.order),
         page: asInt(req.query.page, 1, 1, 100000),
         limit: asInt(req.query.limit, 50, 1, 500),
-        search: typeof req.query.search === 'string' ? req.query.search : undefined,
+        search: asQuery(req.query.search),
       }),
     );
   });
@@ -109,7 +116,7 @@ export function buildRouter(svc: Services): Router {
         order: asOrder(req.query.order),
         page: asInt(req.query.page, 1, 1, 100000),
         limit: asInt(req.query.limit, 100, 1, 500),
-        search: typeof req.query.search === 'string' ? req.query.search : undefined,
+        search: asQuery(req.query.search),
       }),
     );
   });
@@ -127,7 +134,7 @@ export function buildRouter(svc: Services): Router {
 
   // Search
   router.get('/search', (req, res) => {
-    const q = typeof req.query.q === 'string' ? req.query.q.trim() : '';
+    const q = asQuery(req.query.q) ?? '';
     if (!q) {
       res.json({ tracks: [], albums: [], artists: [] });
       return;
@@ -136,11 +143,15 @@ export function buildRouter(svc: Services): Router {
   });
 
   // Stream audio for a track id.
-  router.get('/stream/:id', (req, res) => {
-    const track = svc.db.getById(String(req.params.id));
-    if (!track) throw notFound('Track not found.', 'TRACK_NOT_FOUND');
-    streamAudio(svc.cfg.libraryPath, track.rel_path, req, res);
-  });
+  router.get(
+    '/stream/:id',
+    wrap(async (req, res) => {
+      const track = svc.db.getById(String(req.params.id));
+      if (!track) throw notFound('Track not found.', 'TRACK_NOT_FOUND');
+      const cacheRoot = path.join(path.dirname(svc.cfg.databasePath), 'transcodes');
+      await streamTrackAudio(svc.cfg.libraryPath, cacheRoot, track, req, res);
+    }),
+  );
 
   // Cover art for a track id.
   router.get(
@@ -149,7 +160,6 @@ export function buildRouter(svc: Services): Router {
       const track = svc.db.getById(String(req.params.id));
       if (!track) throw notFound('Track not found.', 'TRACK_NOT_FOUND');
       // Validate the stored relative path is still within the library.
-      resolveWithin(svc.cfg.libraryPath, track.rel_path);
       const abs = resolveWithin(svc.cfg.libraryPath, track.rel_path);
       try {
         const cover = await readCover(abs);

@@ -29,7 +29,7 @@ export default function Library() {
             Point OpenMedia at your music folder, then run a rescan.
           </p>
           <p className="muted" style={{ marginTop: 16, fontFamily: 'var(--mono)', fontSize: 12 }}>
-            MUSIC_LIBRARY_PATH={summary.libraryPath || '/path/to/music'}
+            MUSIC_LIBRARY_PATH=/path/to/music
           </p>
           <p className="muted">Edit <code>.env</code> at the project root, restart, and press “Rescan Library” in the sidebar.</p>
         </div>
@@ -89,10 +89,10 @@ export default function Library() {
 
       <h2 className="section-title">Quick links</h2>
       <div className="chips">
-        <button className="chip" onClick={() => navigate('/songs')}>
+        <button className="chip" onClick={() => navigate('/music/songs')}>
           <Clock size={14} style={{ verticalAlign: '-2px', marginRight: 6 }} /> All songs
         </button>
-        <button className="chip" onClick={() => navigate('/albums')}>
+        <button className="chip" onClick={() => navigate('/music/albums')}>
           <Disc3 size={14} style={{ verticalAlign: '-2px', marginRight: 6 }} /> All albums
         </button>
         <span className="chip" style={{ cursor: 'default' }}>

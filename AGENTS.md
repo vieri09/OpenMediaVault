@@ -1,6 +1,6 @@
-# CLAUDE.md
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to Codex (Codex.ai/code) when working with code in this repository.
 
 ## Commands
 
@@ -38,10 +38,6 @@ Express + TypeScript + `better-sqlite3`. Entry: `server/src/index.ts` (`createAp
 | `keys.ts` | Deterministic SHA-1 public IDs for tracks, albums, artists (stable across rescans). |
 | `routes.ts` | All `/api/*` endpoints. `buildRouter(svc)` takes `{cfg, db, scanner}` for DI. |
 | `stream.ts` | HTTP Range-aware audio streaming. |
-| `video-db.ts` | `VideoDatabase` class — SQLite schema for movies with resume progress. |
-| `video-scanner.ts` | Movie library scanner (MP4, M4V, MKV, AVI). |
-| `video-transcode.ts` | FFmpeg HLS transcoding for non-browser-compatible formats. |
-| `video-routes.ts` | `/api/movies/*` endpoints. |
 | `index.ts` | Express app factory + bootstrap. Error middleware. Production SPA serving. |
 
 **Security invariants:**
@@ -51,7 +47,7 @@ Express + TypeScript + `better-sqlite3`. Entry: `server/src/index.ts` (`createAp
 
 ### Client (`client/`)
 
-React 18 + Vite + TypeScript. React Router v6 with two separate app layouts mounted at different paths.
+React 18 + Vite + TypeScript. React Router v6 with a root layout + nested pages.
 
 **State management (all zustand, persisted to localStorage):**
 - `stores/player.ts` — Queue state machine: `queue` (stable order) + `order` (playback permutation). Shuffle pins current track at front via Fisher-Yates. Repeat modes: off / all / one.
@@ -60,24 +56,28 @@ React 18 + Vite + TypeScript. React Router v6 with two separate app layouts moun
 
 **Data fetching:** SWR with a custom `fetcher` in `main.tsx`. Typed API client in `api.ts` (`getJSON<T>()` helper). Stream/cover URLs returned as strings for direct `<audio>`/`<img>` use.
 
-**Dual-app routing** (`main.tsx`):
-- `/music/*` routes → `App.tsx` (MusicApp layout)
-- `/movie/*` routes → `MovieApp.tsx` (MovieApp layout)
-- Legacy redirects (`/albums`, `/artists`, etc.) → `/music/*`
+**Pages:** Library, Albums, AlbumDetail, Artists, ArtistDetail, Genres, Songs, Search, NowPlaying — all under `pages/`.
 
-**Music pages:** Library, Albums, AlbumDetail, Artists, ArtistDetail, Genres, Songs, Search, NowPlaying.
-
-**Movie pages:** Movies, MovieDetail, ContinueWatching, VideoPlayer.
-
-**Components:** Player (bottom bar + audio element), QueuePanel (slide-out), CommandPalette (⌘K), TrackList, Grids, Cover, RescanButton, MovieCard.
+**Components:** Player (bottom bar + audio element), QueuePanel (slide-out), CommandPalette (⌘K), TrackList, Grids, Cover, RescanButton.
 
 **Hooks:** `useKeyboard` (global hotkeys matching Monochrome scheme), `useMediaSession` (OS media controls).
+
+**Routing** (`main.tsx`):
+```
+/              → Library (index)
+/albums        → Albums list
+/albums/:id    → Album detail
+/artists       → Artists list
+/artists/:id   → Artist detail
+/genres        → Genres list
+/songs         → Songs list
+/search        → Search results
+/nowplaying    → Now playing view
+```
 
 ### API
 
 All endpoints at `/api/*`. Key patterns: paginated lists with whitelisted sort keys, stable SHA-1 IDs, Range-aware streaming (`GET /api/stream/:id`), embedded cover art (`GET /api/cover/:id`). Rescan is async: `POST /api/rescan` → 202, poll `GET /api/scan/status`.
-
-Movie endpoints at `/api/movies/*` with HLS streaming (`/api/movies/:id/master.m3u8`).
 
 ### Testing conventions
 
@@ -87,14 +87,11 @@ Movie endpoints at `/api/movies/*` with HLS streaming (`/api/movies/:id/master.m
 - `keys.test.ts` verifies deterministic SHA-1 stability.
 - `db.test.ts` verifies sort-key whitelisting and aggregation.
 - `api.test.ts` covers Range streaming (206/200/404), cover bytes, rescan idempotency.
-- `video.test.ts` covers movie scanning, thumbnail generation, and HLS transcoding.
 
 ### Key design decisions
 
-- **No transcoding** (audio): files stream as-is; browser codec support determines playability. ALAC is converted to FLAC on first playback and cached.
-- **On-demand transcoding** (video): MKV/AVI/HEVC/H.265 → HLS via FFmpeg; compatible MP4 plays directly.
-- **Hardware H.264 encoding** on macOS via VideoToolbox; `libx264` fallback on other platforms.
+- **No transcoding**: files stream as-is; browser codec support determines playability.
 - **No accounts**: everything is local-first; preferences in localStorage.
 - **Single-port production**: `npm run build` + `npm start` serves everything from `localhost:3000`.
 - **Deterministic IDs**: SHA-1 of normalized names means IDs survive re-scans and DB wipes.
-- **Dotenv loaded from repo root**: `config.ts` resolves `PROJECT_ROOT` from `import.meta.url`, not `process.cwd`.
+- **Dotenv loaded from repo root**: `config.ts` resolves `PROJECT_ROOT` from `import.meta.url`, not `process.cwd()`.

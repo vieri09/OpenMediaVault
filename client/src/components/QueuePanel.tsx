@@ -2,8 +2,8 @@ import { Link } from 'react-router-dom';
 import { X, Trash2 } from 'lucide-react';
 import { usePlayer } from '../stores/player.ts';
 import { useUI } from '../stores/ui.ts';
-import { coverUrl } from '../api.ts';
 import { formatTime } from '../lib/format.ts';
+import { Cover } from './Cover.tsx';
 
 export default function QueuePanel() {
   const open = useUI((s) => s.queueOpen);
@@ -50,7 +50,7 @@ export default function QueuePanel() {
                   className={`queue-item ${isCurrent ? 'current' : ''}`}
                   onClick={() => jumpTo(position)}
                 >
-                  <img src={coverUrl(track.id)} alt="" loading="lazy" onError={(e) => (e.currentTarget.style.visibility = 'hidden')} />
+                  <Cover coverTrackId={track.id} hasCover={track.hasCover} alt="" className="queue-thumb" />
                   <div className="qi-meta">
                     <div className="qi-t">{track.title}</div>
                     <div className="qi-a">{track.artist || 'Unknown Artist'}</div>
@@ -73,7 +73,7 @@ export default function QueuePanel() {
           )}
         </div>
         <div style={{ padding: '12px 18px', borderTop: '1px solid var(--border)', color: 'var(--text-faint)', fontSize: 12 }}>
-          <Link to="/nowplaying" onClick={() => setOpen(false)} style={{ color: 'var(--text-muted)' }}>
+          <Link to="/music/nowplaying" onClick={() => setOpen(false)} style={{ color: 'var(--text-muted)' }}>
             Open Now Playing →
           </Link>
         </div>

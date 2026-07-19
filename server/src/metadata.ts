@@ -27,7 +27,11 @@ export interface ParsedTrack {
  * Parse a single audio file into a normalized TrackRow.
  * Throws if the file cannot be read or parsed — callers record it as a scan error.
  */
-export async function parseTrack(absPath: string, relPath: string): Promise<ParsedTrack> {
+export async function parseTrack(
+  absPath: string,
+  relPath: string,
+  fileStat: { size: number; mtimeMs: number },
+): Promise<ParsedTrack> {
   const meta: IAudioMetadata = await parseFile(absPath, { duration: true });
   const common = meta.common;
   const format = path.extname(absPath).slice(1).toLowerCase();
@@ -42,8 +46,6 @@ export async function parseTrack(absPath: string, relPath: string): Promise<Pars
   const trackNo = num(common.track?.no);
   const discNo = num(common.disk?.no);
   const effArtist = effectiveArtist(artist, albumArtistRaw);
-
-  const stat = await safeStat(absPath);
 
   const row: TrackRow = {
     id: trackId(relPath),
@@ -60,8 +62,8 @@ export async function parseTrack(absPath: string, relPath: string): Promise<Pars
     disc_no: discNo,
     has_cover: meta.common.picture && meta.common.picture.length > 0 ? 1 : 0,
     format,
-    size: stat?.size ?? 0,
-    mtime: stat?.mtimeMs ?? 0,
+    size: fileStat.size,
+    mtime: fileStat.mtimeMs,
     album_key: albumKey(album),
     artist_key: artistKey(effArtist),
     effective_artist: effArtist,
@@ -69,16 +71,6 @@ export async function parseTrack(absPath: string, relPath: string): Promise<Pars
     scanned_at: 0, // filled by scanner
   };
   return { row };
-}
-
-async function safeStat(p: string): Promise<{ size: number; mtimeMs: number } | null> {
-  try {
-    const fs = await import('node:fs/promises');
-    const s = await fs.stat(p);
-    return { size: s.size, mtimeMs: s.mtimeMs };
-  } catch {
-    return null;
-  }
 }
 
 /**

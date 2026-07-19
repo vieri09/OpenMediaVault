@@ -1,9 +1,9 @@
-# OpenMediaVault
+# OpenMedia
 
-A self-hosted, browser-based music player that streams from a folder on your own
-machine. Dark, minimalist, keyboard-driven, and **private by design** — there is
-no account system, no login, no cloud, and no streaming service. It scans a
-local folder you choose, caches the metadata, and plays your files in the
+A self-hosted, browser-based player for music and movies stored on your own
+drives. Dark, minimalist, keyboard-driven, and **private by design** — there is
+no account system, no login, no cloud, and no streaming service. It scans local
+folders you choose, caches metadata in SQLite, and plays your media in the
 browser.
 
 Inspired by the architecture and UI of
@@ -34,6 +34,13 @@ account, social, and cloud features have been intentionally removed.
 - **PWA** install support.
 - **Local preferences** saved in the browser: volume, shuffle/repeat, queue,
   recently played, and favorites. **No server-side accounts.**
+- **Local movie library** for MP4, M4V, MKV and AVI files.
+- **Optimized video playback:** compatible H.264 MP4 plays directly; MKV, AVI,
+  HEVC/H.265 and incompatible audio use an on-demand FFmpeg → HLS session.
+- **Hardware H.264 encoding on macOS** through VideoToolbox when available,
+  with a constrained `libx264` fallback elsewhere.
+- **Lazy local thumbnails**, movie search/sorting, resume progress, and
+  Continue Watching.
 
 ---
 
@@ -80,8 +87,8 @@ OpenMedia-v2/
 
 ## 🚀 Quick start
 
-> **Requirements:** Node.js 20+ and npm. [ffmpeg](https://ffmpeg.org/) is **not**
-> required to run the app — it is only used by the test suite.
+> **Requirements:** Node.js 20+, npm, and [ffmpeg](https://ffmpeg.org/) +
+> `ffprobe` for movie scanning/playback and ALAC compatibility conversion.
 
 ### 1. Install dependencies
 
@@ -100,6 +107,7 @@ Create a `.env` at the project root (or copy `.env.example`) and set
 cp .env.example .env
 # then edit .env:
 MUSIC_LIBRARY_PATH=/path/to/your/music
+MOVIE_LIBRARY_PATH=/path/to/your/movies
 ```
 
 The folder is scanned recursively. Example layout:
@@ -122,12 +130,16 @@ npm run dev
 ```
 
 This starts **both** the backend API (Express, on `APP_PORT`, default `3000`)
-and the frontend (Vite, on `http://localhost:5173`). Open the app in your
-browser:
+and the frontend (Vite, on port `5173`). With the default
+`APP_HOST=127.0.0.1`, open the app in your browser:
 
 ```
 http://localhost:5173
 ```
+
+To use development mode from another device on the same trusted Wi-Fi, set
+`APP_HOST=0.0.0.0`, restart `npm run dev`, and open
+`http://<this-computer's-LAN-IP>:5173` on that device.
 
 On first launch, if the library is empty the backend **scans automatically**.
 After that it boots instantly from the cache. You can always trigger a rescan
@@ -142,7 +154,9 @@ All settings live in `.env` at the project root (read by the server on startup).
 | Variable | Default | Description |
 |---|---|---|
 | `MUSIC_LIBRARY_PATH` | `./music` | Folder scanned recursively for audio. **Set this to your music.** |
+| `MOVIE_LIBRARY_PATH` | _(unset)_ | Optional folder scanned recursively for MP4, M4V, MKV and AVI movies. |
 | `APP_PORT` | `3000` | Port for the backend API (and the production SPA). |
+| `APP_HOST` | `127.0.0.1` | Interface to bind. Use `0.0.0.0` only for intentional LAN access. |
 | `DATABASE_PATH` | `./data/library.db` | Where the SQLite metadata cache lives. |
 | `EXTRA_AUDIO_EXTENSIONS` | _(empty)_ | Comma-separated extra extensions, e.g. `aif,m4b,caf`. |
 | `LOG_LEVEL` | `info` | One of `debug`, `info`, `warn`, `error`. |
@@ -166,9 +180,45 @@ All settings live in `.env` at the project root (read by the server on startup).
 ## 🎵 Supported formats
 
 `mp3`, `flac`, `wav`, `m4a`, `aac`, `ogg`, `opus` (+ `oga`, `weba`, `wma` on a
-best-effort basis). Add rare formats with `EXTRA_AUDIO_EXTENSIONS`. Whether a
-given file plays in the browser ultimately depends on the browser's codec
-support (Safari and Chrome differ on FLAC/Opus).
+best-effort basis). Add rare formats with `EXTRA_AUDIO_EXTENSIONS`. Music is
+streamed as its original bytes whenever the browser supports it. ALAC audio
+inside M4A is converted losslessly to FLAC on first playback and cached under
+`data/transcodes`; no audio information is discarded.
+
+## 🎬 Movie playback
+
+- The movie library mirrors the directory tree under `MOVIE_LIBRARY_PATH`.
+  Folders and videos are sorted alphabetically; OpenMedia does not guess show,
+  season, episode, OVA, or special metadata from filenames.
+- MP4/M4V containing H.264 video and AAC/MP3 audio uses native browser playback
+  with HTTP Range seeking.
+- MKV and AVI use an ephemeral HLS session. Browser-compatible 8-bit H.264 and
+  AAC are copied unchanged rather than re-encoded.
+- HEVC/H.265, H.264 Hi10P/4:2:2/4:4:4, and other incompatible video are
+  remuxed unchanged into fragmented-MP4 HLS when the browser advertises HEVC
+  support. Other browsers receive high-quality H.264 at the source resolution;
+  HDR/PQ/HLG sources are tone-mapped to standards-compliant BT.709 rather than
+  carrying invalid HDR signaling into an 8-bit stream. The hardware encoder
+  uses a resolution-scaled 8–45 Mbps target without speed-priority mode; the
+  software fallback uses x264 CRF 18. Incompatible audio is converted to
+  512 kbps AAC while preserving the source channel layout.
+- Multiple audio tracks can be selected during HLS playback. Text subtitles
+  (including SRT, ASS/SSA, mov_text, and WebVTT) are converted to WebVTT only
+  when selected. Conversion seeks directly to an overlapping window around the
+  current position, caches it under `data/movie-subtitles`, and retimes it after
+  HLS seeks; image-based subtitles such as PGS are not exposed.
+- HLS uses short four-second segments, builds an approximately 12-second
+  startup cushion, and keeps up to about 45 seconds queued ahead in the browser.
+  A single active server transcode session prevents competing conversions.
+- Seeking beyond generated HLS data restarts FFmpeg at the requested position.
+- HLS scratch data is stored in the operating-system temp directory and removed
+  when idle or when playback closes. Whole converted movies are not retained.
+- Thumbnails are generated only when visible movie cards request them, then
+  cached under `data/movie-thumbnails`.
+
+The movie pipeline takes architectural inspiration from
+[Retlix](https://github.com/simoncena/retlix), adapted for local-drive files
+without IPTV, providers, remote metadata, accounts, or live television.
 
 ---
 
@@ -201,9 +251,13 @@ npm run build      # builds client/ into client/dist
 npm start          # runs the server; serves the SPA at / and the API at /api
 ```
 
-Then open `http://localhost:3000`. In this mode the whole app — UI and API — is
-served from one origin (handy for putting behind a reverse proxy or accessing
-from another machine on your LAN).
+Then open `http://localhost:3000/music` for the independent music player or
+`http://localhost:3000/movie` for the movie library. The root URL redirects to
+music, and older unprefixed links redirect to their new locations. In this mode
+the whole app — both UIs and the API — is served from one origin. It binds to
+loopback by default because there is no account system. To intentionally allow
+LAN access, set `APP_HOST=0.0.0.0` and protect the service with a trusted
+firewall or authenticated reverse proxy.
 
 > Note: in production the server is run via `tsx` (TypeScript is executed
 > on-the-fly). This keeps the setup simple and is fine for personal self-hosted
@@ -276,8 +330,9 @@ request arbitrary files.
 
 ## ⚠️ Known limitations
 
-- **No transcoding.** Files are streamed as-is; playback depends on the
-  browser's native codec support (e.g. Opus may not play in Safari).
+- **Browser codec limits still apply.** Music streams as-is except for lossless
+  ALAC→FLAC compatibility conversion. Movies that the browser cannot decode
+  require the high-quality HLS compatibility path described above.
 - **No gapless playback** — the browser `<audio>` element has a small gap
   between tracks.
 - **Single library folder.** Point `MUSIC_LIBRARY_PATH` at one root; nested

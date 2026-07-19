@@ -65,6 +65,74 @@ export async function makeMp3(
   return runFfmpeg(args);
 }
 
+/** Write a minimal ALAC-in-M4A file to exercise the compatibility path. */
+export async function makeAlacM4a(
+  dir: string,
+  relPath: string,
+  meta: { title?: string; artist?: string; album?: string } = {},
+): Promise<string> {
+  const abs = path.join(dir, relPath);
+  await fsp.mkdir(path.dirname(abs), { recursive: true });
+  const args = [
+    '-y',
+    '-f', 'lavfi', '-i', 'sine=frequency=550:duration=1',
+    '-ac', '1', '-ar', '44100',
+    '-c:a', 'alac',
+  ];
+  if (meta.title) args.push('-metadata', `title=${meta.title}`);
+  if (meta.artist) args.push('-metadata', `artist=${meta.artist}`);
+  if (meta.album) args.push('-metadata', `album=${meta.album}`);
+  args.push(abs);
+  return runFfmpeg(args);
+}
+
+/** Write a tiny local movie fixture in the requested container. */
+export async function makeVideo(
+  dir: string,
+  relPath: string,
+  opts: {
+    videoCodec?: 'h264' | 'mpeg4';
+    duration?: number;
+    subtitleTracks?: number;
+  } = {},
+): Promise<string> {
+  const abs = path.join(dir, relPath);
+  await fsp.mkdir(path.dirname(abs), { recursive: true });
+  const codec = opts.videoCodec === 'mpeg4' ? 'mpeg4' : 'libx264';
+  const subtitleTracks = Math.max(0, opts.subtitleTracks ?? 0);
+  const subtitleFile = path.join(path.dirname(abs), '.fixture-subtitle.srt');
+  if (subtitleTracks > 0) {
+    await fsp.writeFile(
+      subtitleFile,
+      '1\n00:00:00,250 --> 00:00:01,750\nFixture subtitle text\n',
+      'utf8',
+    );
+  }
+  const args = [
+    '-y',
+    '-f', 'lavfi', '-i', `testsrc=size=320x180:rate=24:duration=${opts.duration ?? 2}`,
+    '-f', 'lavfi', '-i', `sine=frequency=440:duration=${opts.duration ?? 2}`,
+  ];
+  if (subtitleTracks > 0) args.push('-f', 'srt', '-i', subtitleFile);
+  args.push(
+    '-map', '0:v:0',
+    '-map', '1:a:0',
+  );
+  for (let index = 0; index < subtitleTracks; index++) args.push('-map', '2:s:0');
+  args.push(
+    '-pix_fmt', 'yuv420p',
+    '-c:v', codec,
+    '-c:a', 'aac',
+    '-b:a', '96k',
+  );
+  if (codec === 'libx264') args.push('-preset', 'ultrafast', '-g', '24');
+  if (subtitleTracks > 0) {
+    args.push('-c:s', path.extname(abs).toLowerCase() === '.mp4' ? 'mov_text' : 'srt');
+  }
+  args.push(abs);
+  return runFfmpeg(args);
+}
+
 /** Write an MP3 that embeds a tiny cover image. */
 export async function makeMp3WithCover(
   dir: string,

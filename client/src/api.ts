@@ -4,6 +4,11 @@ import type {
   ArtistDetail,
   Genre,
   LibrarySummary,
+  Movie,
+  MovieFolderPage,
+  MovieProgress,
+  MovieSortKey,
+  MovieSummary,
   PageResult,
   ScanStatus,
   SearchResult,
@@ -78,9 +83,74 @@ export const api = {
   artistDetail: (id: string) => getJSON<ArtistDetail>(`/artists/${id}`),
   genres: () => getJSON<Genre[]>('/genres'),
   search: (q: string, limit = 25) => getJSON<SearchResult>(`/search${qs({ q, limit })}`),
+  movieSummary: () => getJSON<MovieSummary>('/movies/summary'),
+  movieScanStatus: () => getJSON<ScanStatus>('/movies/scan/status'),
+  rescanMovies: () =>
+    fetch(`${BASE}/movies/rescan`, { method: 'POST' }).then((response) => {
+      if (!response.ok) throw new ApiError(response.status, response.statusText);
+      return response.json() as Promise<ScanStatus>;
+    }),
+  movies: (opts: {
+    sort?: MovieSortKey;
+    order?: SortOrder;
+    page?: number;
+    limit?: number;
+    search?: string;
+  } = {}) =>
+    getJSON<PageResult<Movie>>(
+      `/movies${qs(opts as Record<string, string | number | undefined>)}`,
+    ),
+  movieFolder: (id = 'root') =>
+    getJSON<MovieFolderPage>(id === 'root' ? '/movies/folders' : `/movies/folders/${id}`),
+  continueWatching: (limit = 12) => getJSON<Movie[]>(`/movies/continue${qs({ limit })}`),
+  movie: (id: string) => getJSON<Movie>(`/movies/${id}`),
+  saveMovieProgress: async (id: string, position: number, duration: number) => {
+    const response = await fetch(`${BASE}/movies/${id}/progress`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ position, duration }),
+      keepalive: true,
+    });
+    if (!response.ok) throw new ApiError(response.status, response.statusText);
+    return (await response.json()) as MovieProgress;
+  },
+  clearMovieProgress: async (id: string) => {
+    const response = await fetch(`${BASE}/movies/${id}/progress`, { method: 'DELETE' });
+    if (!response.ok) throw new ApiError(response.status, response.statusText);
+  },
 };
 
 /** Stream URL for a track id (used as <audio src>). */
 export const streamUrl = (id: string): string => `${BASE}/stream/${id}`;
 /** Cover-art URL for a track id. */
 export const coverUrl = (id: string): string => `${BASE}/cover/${id}`;
+export const movieThumbnailUrl = (id: string): string => `${BASE}/movies/${id}/thumbnail`;
+export const movieStreamUrl = (id: string): string => `${BASE}/movies/${id}/stream`;
+export const movieHlsUrl = (
+  id: string,
+  start = 0,
+  audioStreamIndex = -1,
+  sourceVideo = false,
+  playbackSessionId?: string,
+): string =>
+  `${BASE}/movies/${id}/hls/index.m3u8${qs({
+    start: start > 0 ? Math.floor(start) : undefined,
+    audio: audioStreamIndex >= 0 ? audioStreamIndex : undefined,
+    video: sourceVideo ? 'source' : undefined,
+    session: playbackSessionId,
+  })}`;
+export const movieSubtitleUrl = (
+  id: string,
+  streamIndex: number,
+  start = 0,
+  from = start,
+): string =>
+  `${BASE}/movies/${id}/subtitles/${streamIndex}.vtt${qs({
+    start: start > 0 ? Math.floor(start) : undefined,
+    from: from > 0 ? Math.floor(from) : undefined,
+  })}`;
+export const stopMovieHls = (id: string, playbackSessionId: string): Promise<Response> =>
+  fetch(
+    `${BASE}/movies/${id}/hls${qs({ session: playbackSessionId })}`,
+    { method: 'DELETE', keepalive: true },
+  );

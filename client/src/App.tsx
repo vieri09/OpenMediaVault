@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { NavLink, Outlet, useNavigate, useLocation } from 'react-router-dom';
 import {
   Disc3,
@@ -10,22 +10,35 @@ import {
   Sliders,
 } from 'lucide-react';
 import Player from './components/Player.tsx';
-import QueuePanel from './components/QueuePanel.tsx';
-import CommandPalette from './components/CommandPalette.tsx';
+import MediaSwitcher from './components/MediaSwitcher.tsx';
 import RescanButton from './components/RescanButton.tsx';
 import { useUI } from './stores/ui.ts';
 import { useKeyboard } from './hooks/useKeyboard.ts';
 import { useMediaSession } from './hooks/useMediaSession.ts';
+
+const QueuePanel = lazy(() => import('./components/QueuePanel.tsx'));
+const CommandPalette = lazy(() => import('./components/CommandPalette.tsx'));
 
 export default function App() {
   const searchRef = useRef<HTMLInputElement>(null);
   const navigate = useNavigate();
   const location = useLocation();
   const togglePalette = useUI((s) => s.togglePalette);
+  const queueOpen = useUI((s) => s.queueOpen);
+  const paletteOpen = useUI((s) => s.paletteOpen);
+  const [queueLoaded, setQueueLoaded] = useState(false);
+  const [paletteLoaded, setPaletteLoaded] = useState(false);
+
+  useEffect(() => {
+    if (queueOpen) setQueueLoaded(true);
+  }, [queueOpen]);
+  useEffect(() => {
+    if (paletteOpen) setPaletteLoaded(true);
+  }, [paletteOpen]);
 
   // While the immersive Now Playing view is open it becomes the sole control
   // surface, so the floating mini-player is hidden via this class.
-  const onNowPlaying = location.pathname === '/nowplaying';
+  const onNowPlaying = location.pathname === '/music/nowplaying';
 
   useKeyboard(searchRef);
   useMediaSession();
@@ -33,7 +46,7 @@ export default function App() {
   const onSearchSubmit = (e: React.FormEvent<HTMLFormElement>): void => {
     e.preventDefault();
     const q = searchRef.current?.value.trim();
-    if (q) navigate(`/search?q=${encodeURIComponent(q)}`);
+    if (q) navigate(`/music/search?q=${encodeURIComponent(q)}`);
   };
 
   const linkClass = ({ isActive }: { isActive: boolean }): string =>
@@ -54,19 +67,19 @@ export default function App() {
         </form>
 
         <div className="nav-section">Browse</div>
-        <NavLink to="/" end className={linkClass}>
+        <NavLink to="/music" end className={linkClass}>
           <Library size={18} /> Library
         </NavLink>
-        <NavLink to="/albums" className={linkClass}>
+        <NavLink to="/music/albums" className={linkClass}>
           <Disc3 size={18} /> Albums
         </NavLink>
-        <NavLink to="/artists" className={linkClass}>
+        <NavLink to="/music/artists" className={linkClass}>
           <Mic2 size={18} /> Artists
         </NavLink>
-        <NavLink to="/genres" className={linkClass}>
+        <NavLink to="/music/genres" className={linkClass}>
           <Sliders size={18} /> Genres
         </NavLink>
-        <NavLink to="/songs" className={linkClass}>
+        <NavLink to="/music/songs" className={linkClass}>
           <Music2 size={18} /> Songs
         </NavLink>
 
@@ -81,9 +94,10 @@ export default function App() {
             <kbd>⌘K</kbd>
           </span>
         </button>
-        <NavLink to="/nowplaying" className={linkClass}>
+        <NavLink to="/music/nowplaying" className={linkClass}>
           <ListMusic size={18} /> Now Playing
         </NavLink>
+        <MediaSwitcher />
       </aside>
 
       <main className="main">
@@ -91,8 +105,10 @@ export default function App() {
       </main>
 
       <Player />
-      <QueuePanel />
-      <CommandPalette />
+      <Suspense fallback={null}>
+        {queueLoaded && <QueuePanel />}
+        {paletteLoaded && <CommandPalette />}
+      </Suspense>
     </div>
   );
 }

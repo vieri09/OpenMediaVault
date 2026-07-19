@@ -2,8 +2,6 @@
 
 export interface Track {
   id: string;
-  /** Path relative to the music library root. */
-  relPath: string;
   title: string;
   artist: string;
   albumArtist: string;
@@ -15,14 +13,6 @@ export interface Track {
   trackNumber: number | null;
   discNumber: number | null;
   hasCover: boolean;
-  /** File extension without the dot, lower-cased. */
-  format: string;
-  /** File size in bytes. */
-  size: number;
-  /** Unix epoch (ms) the file was last modified. */
-  mtime: number;
-  /** Unix epoch (ms) the track was first scanned. */
-  dateAdded: number;
 }
 
 export interface Album {
@@ -71,7 +61,6 @@ export interface LibrarySummary {
   genreCount: number;
   totalDurationSeconds: number;
   configured: boolean;
-  libraryPath: string;
 }
 
 export type SortOrder = 'asc' | 'desc';

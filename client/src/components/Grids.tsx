@@ -3,6 +3,7 @@ import { Play } from 'lucide-react';
 import type { Album, AlbumDetail, Artist, Track } from '../types.ts';
 import { usePlayer } from '../stores/player.ts';
 import { Cover } from './Cover.tsx';
+import { api } from '../api.ts';
 
 interface AlbumGridProps {
   albums: Album[];
@@ -26,15 +27,14 @@ function AlbumCard({ album }: { album: Album }) {
     e.preventDefault();
     e.stopPropagation();
     try {
-      const res = await fetch(`/api/albums/${album.id}`);
-      const detail = (await res.json()) as AlbumDetail;
+      const detail: AlbumDetail = await api.albumDetail(album.id);
       if (detail.tracks && detail.tracks.length > 0) playTracks(detail.tracks as Track[], 0);
     } catch {
       /* ignore */
     }
   };
   return (
-    <Link to={`/albums/${album.id}`} className="card">
+    <Link to={`/music/albums/${album.id}`} className="card">
       <div className="card-cover">
         <Cover coverTrackId={album.coverTrackId} hasCover={album.hasCover} alt={album.title} className="card-cover" />
         <button className="card-play" onClick={handlePlay} title={`Play ${album.title}`} aria-label="Play">
@@ -56,7 +56,7 @@ export function ArtistGrid({ artists }: ArtistGridProps) {
   return (
     <div className="grid grid-artists">
       {artists.map((artist) => (
-        <Link key={artist.id} to={`/artists/${artist.id}`} className="card">
+        <Link key={artist.id} to={`/music/artists/${artist.id}`} className="card">
           <div className="artist-avatar">
             <span>{initials(artist.name)}</span>
           </div>

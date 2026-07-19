@@ -55,11 +55,11 @@ export default function CommandPalette() {
 
   const navItems: Item[] = useMemo(
     () => [
-      { key: 'nav-lib', label: 'Go to Library', icon: 'nav', activate: () => navigate('/') },
-      { key: 'nav-albums', label: 'Go to Albums', icon: 'nav', activate: () => navigate('/albums') },
-      { key: 'nav-artists', label: 'Go to Artists', icon: 'nav', activate: () => navigate('/artists') },
-      { key: 'nav-songs', label: 'Go to Songs', icon: 'nav', activate: () => navigate('/songs') },
-      { key: 'nav-genres', label: 'Go to Genres', icon: 'nav', activate: () => navigate('/genres') },
+      { key: 'nav-lib', label: 'Go to Library', icon: 'nav', activate: () => navigate('/music') },
+      { key: 'nav-albums', label: 'Go to Albums', icon: 'nav', activate: () => navigate('/music/albums') },
+      { key: 'nav-artists', label: 'Go to Artists', icon: 'nav', activate: () => navigate('/music/artists') },
+      { key: 'nav-songs', label: 'Go to Songs', icon: 'nav', activate: () => navigate('/music/songs') },
+      { key: 'nav-genres', label: 'Go to Genres', icon: 'nav', activate: () => navigate('/music/genres') },
     ],
     [navigate],
   );
@@ -90,7 +90,7 @@ export default function CommandPalette() {
           sub: a.albumArtist,
           icon: 'album',
           activate: () => {
-            navigate(`/albums/${a.id}`);
+            navigate(`/music/albums/${a.id}`);
             setOpen(false);
           },
         });
@@ -102,7 +102,7 @@ export default function CommandPalette() {
           sub: `${ar.trackCount} song${ar.trackCount === 1 ? '' : 's'}`,
           icon: 'artist',
           activate: () => {
-            navigate(`/artists/${ar.id}`);
+            navigate(`/music/artists/${ar.id}`);
             setOpen(false);
           },
         });

@@ -3,7 +3,14 @@ import request from 'supertest';
 import { createApp } from '../src/index.ts';
 import { loadConfig } from '../src/config.ts';
 import type { AppConfig } from '../src/config.ts';
-import { makeTempDir, rmrf, makeMp3, makeMp3WithCover, describeWithFfmpeg } from './helpers.ts';
+import {
+  makeTempDir,
+  rmrf,
+  makeMp3,
+  makeMp3WithCover,
+  makeAlacM4a,
+  describeWithFfmpeg,
+} from './helpers.ts';
 
 describeWithFfmpeg('API + scanner integration', () => {
   let libDir: string;
@@ -20,6 +27,7 @@ describeWithFfmpeg('API + scanner integration', () => {
     await makeMp3(libDir, 'Aphex Twin/SAW/Xtal.mp3', { title: 'Xtal', artist: 'Aphex Twin', album: 'SAW', track: '1', date: '1992', genre: 'Electronic' });
     await makeMp3(libDir, 'Aphex Twin/SAW/Tha.mp3', { title: 'Tha', artist: 'Aphex Twin', album: 'SAW', track: '2', date: '1992', genre: 'Electronic' });
     await makeMp3WithCover(libDir, 'Cover/Cover Album/Cover Song.mp3', { title: 'Cover Song', artist: 'Cover Artist', album: 'Cover Album' });
+    await makeAlacM4a(libDir, 'Lossless/ALAC Song.m4a', { title: 'ALAC Song', artist: 'Lossless Artist', album: 'Lossless Album' });
     await makeMp3(libDir, 'not-audio.txt.mp3', { title: 'Nope' }); // has .mp3 ext, valid
 
     // Build a config that points at our temp library.
@@ -32,6 +40,8 @@ describeWithFfmpeg('API + scanner integration', () => {
 
     cleanup = async () => {
       built.db.close();
+      built.videoDb.close();
+      built.videoTranscoder.close();
       await rmrf(libDir);
       await rmrf(libDir + '-db');
     };
@@ -45,6 +55,15 @@ describeWithFfmpeg('API + scanner integration', () => {
     const res = await request(app).get('/api/health');
     expect(res.status).toBe(200);
     expect(res.body.ok).toBe(true);
+    expect(res.headers['x-content-type-options']).toBe('nosniff');
+    expect(res.headers['x-frame-options']).toBe('DENY');
+    expect(res.headers['content-security-policy']).toContain("default-src 'self'");
+  });
+
+  it('rejects non-local Host headers while bound to loopback', async () => {
+    const res = await request(app).get('/api/health').set('Host', 'attacker.example');
+    expect(res.status).toBe(421);
+    expect(res.body.code).toBe('INVALID_HOST');
   });
 
   it('GET /api/library/summary reports scanned counts', async () => {
@@ -54,6 +73,7 @@ describeWithFfmpeg('API + scanner integration', () => {
     expect(res.body.trackCount).toBeGreaterThanOrEqual(3);
     expect(res.body.albumCount).toBeGreaterThanOrEqual(2);
     expect(res.body.artistCount).toBeGreaterThanOrEqual(2);
+    expect(res.body).not.toHaveProperty('libraryPath');
   });
 
   it('GET /api/tracks returns parsed metadata', async () => {
@@ -66,6 +86,9 @@ describeWithFfmpeg('API + scanner integration', () => {
     expect(xtal.year).toBe(1992);
     expect(xtal.trackNumber).toBe(1);
     expect(xtal.duration).toBeGreaterThan(0);
+    expect(xtal).not.toHaveProperty('relPath');
+    expect(xtal).not.toHaveProperty('size');
+    expect(xtal).not.toHaveProperty('mtime');
   });
 
   it('GET /api/albums aggregates and exposes cover track', async () => {
@@ -96,7 +119,7 @@ describeWithFfmpeg('API + scanner integration', () => {
   });
 
   it('GET /api/stream/:id serves a 206 partial response with Content-Range', async () => {
-    const tracks = (await request(app).get('/api/tracks?limit=1')).body.items;
+    const tracks = (await request(app).get('/api/tracks?search=Xtal')).body.items;
     const id = tracks[0].id;
     const res = await request(app)
       .get(`/api/stream/${id}`)
@@ -107,10 +130,28 @@ describeWithFfmpeg('API + scanner integration', () => {
   });
 
   it('GET /api/stream/:id serves 200 without a range header', async () => {
-    const tracks = (await request(app).get('/api/tracks?limit=1')).body.items;
+    const tracks = (await request(app).get('/api/tracks?search=Xtal')).body.items;
     const res = await request(app).get(`/api/stream/${tracks[0].id}`);
     expect(res.status).toBe(200);
     expect(res.headers['content-length']).toBeDefined();
+  });
+
+  it('transcodes ALAC-in-M4A to cached, range-capable lossless FLAC', async () => {
+    const tracks = (await request(app).get('/api/tracks?search=ALAC%20Song')).body.items;
+    const id = tracks[0].id;
+
+    const first = await request(app).get(`/api/stream/${id}`);
+    expect(first.status).toBe(200);
+    expect(first.headers['content-type']).toMatch(/^audio\/flac/);
+    expect(first.headers['x-openmedia-transcoded']).toBe('alac-to-flac-lossless');
+    expect(first.body.subarray(0, 4).toString('ascii')).toBe('fLaC');
+
+    const ranged = await request(app)
+      .get(`/api/stream/${id}`)
+      .set('Range', 'bytes=0-255');
+    expect(ranged.status).toBe(206);
+    expect(ranged.headers['content-range']).toMatch(/^bytes 0-255\/\d+$/);
+    expect(ranged.headers['x-openmedia-transcoded']).toBe('alac-to-flac-lossless');
   });
 
   it('GET /api/stream with a bogus id returns 404', async () => {
@@ -141,11 +182,20 @@ describeWithFfmpeg('API + scanner integration', () => {
       if (!status.scanning && status.lastResult) {
         // Second scan: everything skipped (no changes).
         expect(status.lastResult.skipped).toBeGreaterThan(0);
+        expect(status.processed).toBe(status.total);
         return;
       }
       await new Promise((r) => setTimeout(r, 150));
     }
     throw new Error('Scan did not finish in time');
+  });
+
+  it('rejects cross-site requests before starting a rescan', async () => {
+    const res = await request(app)
+      .post('/api/rescan')
+      .set('Sec-Fetch-Site', 'cross-site');
+    expect(res.status).toBe(403);
+    expect(res.body.code).toBe('CROSS_SITE_REQUEST');
   });
 
   it('removes tracks that disappear from disk on rescan', async () => {

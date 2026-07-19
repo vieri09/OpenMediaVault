@@ -23,22 +23,33 @@ describe('loadConfig', () => {
   it('uses defaults when env vars are absent', () => {
     saved = withEnv({
       MUSIC_LIBRARY_PATH: undefined,
+      MOVIE_LIBRARY_PATH: undefined,
       APP_PORT: undefined,
+      APP_HOST: undefined,
       DATABASE_PATH: undefined,
       LOG_LEVEL: undefined,
       EXTRA_AUDIO_EXTENSIONS: undefined,
     });
     const cfg = loadConfig();
     expect(cfg.port).toBe(3000);
+    expect(cfg.host).toBe('127.0.0.1');
+    expect(cfg.movieLibraryPath).toBeNull();
     expect(cfg.logLevel).toBe('info');
     expect(cfg.databasePath.endsWith('data/library.db')).toBe(true);
   });
 
   it('parses a custom port and database path', () => {
-    saved = withEnv({ APP_PORT: '4242', DATABASE_PATH: '/tmp/x.db' });
+    saved = withEnv({
+      APP_PORT: '4242',
+      APP_HOST: '0.0.0.0',
+      DATABASE_PATH: '/tmp/x.db',
+      MOVIE_LIBRARY_PATH: '/tmp/movies',
+    });
     const cfg = loadConfig();
     expect(cfg.port).toBe(4242);
     expect(cfg.databasePath).toBe('/tmp/x.db');
+    expect(cfg.host).toBe('0.0.0.0');
+    expect(cfg.movieLibraryPath).toBe('/tmp/movies');
   });
 
   it('rejects an invalid port', () => {
@@ -49,6 +60,11 @@ describe('loadConfig', () => {
   it('rejects port out of range', () => {
     saved = withEnv({ APP_PORT: '99999' });
     expect(() => loadConfig()).toThrow(/APP_PORT/);
+  });
+
+  it('rejects an invalid host', () => {
+    saved = withEnv({ APP_HOST: 'http://localhost:3000' });
+    expect(() => loadConfig()).toThrow(/APP_HOST/);
   });
 
   it('rejects an invalid log level', () => {

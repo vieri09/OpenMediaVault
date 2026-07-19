@@ -173,10 +173,10 @@ export class Scanner {
         while (cursor < files.length) {
           const index = cursor++;
           const absPath = files[index];
+          const relPath = path.relative(this.cfg.libraryPath, absPath);
           keepPaths.add(absPath);
           try {
             const stat = await fsp.stat(absPath);
-            const relPath = path.relative(this.cfg.libraryPath, absPath);
             const existing = this.db.getByPath(absPath);
 
             // Incremental: skip if unchanged.
@@ -187,12 +187,10 @@ export class Scanner {
               existing.format === path.extname(absPath).slice(1).toLowerCase()
             ) {
               skipped++;
-              this.status.processed++;
-              onProgress?.(this.status.processed, this.status.total);
               continue;
             }
 
-            const { row } = await parseTrack(absPath, relPath);
+            const { row } = await parseTrack(absPath, relPath, stat);
             const wasNew = !existing;
             // Preserve original date_added on update.
             row.date_added = existing?.date_added ?? now;
@@ -201,7 +199,10 @@ export class Scanner {
             if (wasNew) added++;
             else updated++;
           } catch (err) {
-            errors.push({ path: absPath, message: (err as Error).message });
+            errors.push({
+              path: relPath,
+              message: (err as Error).message.split(this.cfg.libraryPath).join('music library'),
+            });
             log.warn(`Failed to scan "${absPath}": ${(err as Error).message}`);
           } finally {
             this.status.processed++;
@@ -244,7 +245,13 @@ export class Scanner {
         updated,
         skipped,
         removed: 0,
-        errors: [...errors, { path: this.cfg.libraryPath, message: (err as Error).message }],
+        errors: [
+          ...errors,
+          {
+            path: '.',
+            message: (err as Error).message.split(this.cfg.libraryPath).join('music library'),
+          },
+        ],
         durationMs: Date.now() - started,
       };
       this.status.lastResult = result;

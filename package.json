@@ -2,7 +2,7 @@
   "name": "openmedia-vault",
   "version": "1.0.0",
   "private": true,
-  "description": "A self-hosted, browser-based music player that plays from a local folder. Inspired by Monochrome.",
+  "description": "A self-hosted browser player for local music and movies.",
   "license": "MIT",
   "type": "module",
   "workspaces": [

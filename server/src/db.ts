@@ -81,10 +81,29 @@ CREATE TABLE IF NOT EXISTS meta (
 );
 `;
 
-function rowToTrack(r: TrackRow): Track {
+type PublicTrackRow = Pick<
+  TrackRow,
+  | 'id'
+  | 'title'
+  | 'artist'
+  | 'album_artist'
+  | 'album'
+  | 'genre'
+  | 'year'
+  | 'duration'
+  | 'track_no'
+  | 'disc_no'
+  | 'has_cover'
+>;
+
+const PUBLIC_TRACK_COLUMNS = `
+  id, title, artist, album_artist, album, genre, year, duration,
+  track_no, disc_no, has_cover
+`;
+
+function rowToTrack(r: PublicTrackRow): Track {
   return {
     id: r.id,
-    relPath: r.rel_path,
     title: r.title,
     artist: r.artist,
     albumArtist: r.album_artist,
@@ -95,10 +114,6 @@ function rowToTrack(r: TrackRow): Track {
     trackNumber: r.track_no,
     discNumber: r.disc_no,
     hasCover: r.has_cover === 1,
-    format: r.format,
-    size: r.size,
-    mtime: r.mtime,
-    dateAdded: r.date_added,
   };
 }
 
@@ -115,7 +130,7 @@ const TRACK_SORT: Record<TrackSortKey, string> = {
   artist: 'artist COLLATE NOCASE',
   album: 'album COLLATE NOCASE',
   duration: 'duration',
-  date_added: 'dateAdded',
+  date_added: 'date_added',
 };
 
 export class LibraryDatabase {
@@ -308,9 +323,9 @@ export class LibraryDatabase {
     ).n;
     const rows = this.db
       .prepare(
-        `SELECT * FROM tracks ${whereSql} ORDER BY ${sort} ${order}, title COLLATE NOCASE ${order} LIMIT @limit OFFSET @offset`,
+        `SELECT ${PUBLIC_TRACK_COLUMNS} FROM tracks ${whereSql} ORDER BY ${sort} ${order}, title COLLATE NOCASE ${order} LIMIT @limit OFFSET @offset`,
       )
-      .all({ ...params, limit, offset }) as TrackRow[];
+      .all({ ...params, limit, offset }) as PublicTrackRow[];
 
     return this.paginate(rows.map(rowToTrack), total, page, limit);
   }
@@ -390,9 +405,9 @@ export class LibraryDatabase {
     if (!base) return undefined;
     const rows = this.db
       .prepare(
-        `SELECT * FROM tracks WHERE album_key = ? ORDER BY COALESCE(disc_no,1), COALESCE(track_no,1), title COLLATE NOCASE`,
+        `SELECT ${PUBLIC_TRACK_COLUMNS} FROM tracks WHERE album_key = ? ORDER BY COALESCE(disc_no,1), COALESCE(track_no,1), title COLLATE NOCASE`,
       )
-      .all(albumId) as TrackRow[];
+      .all(albumId) as PublicTrackRow[];
     return {
       id: base.id,
       title: base.title,
@@ -458,9 +473,9 @@ export class LibraryDatabase {
     const albums: Album[] = this.listAlbumsForArtist(artistId);
     const trackRows = this.db
       .prepare(
-        `SELECT * FROM tracks WHERE artist_key = ? ORDER BY album COLLATE NOCASE, COALESCE(disc_no,1), COALESCE(track_no,1)`,
+        `SELECT ${PUBLIC_TRACK_COLUMNS} FROM tracks WHERE artist_key = ? ORDER BY album COLLATE NOCASE, COALESCE(disc_no,1), COALESCE(track_no,1)`,
       )
-      .all(artistId) as TrackRow[];
+      .all(artistId) as PublicTrackRow[];
 
     return {
       id: base.id,
@@ -511,11 +526,11 @@ export class LibraryDatabase {
     const term = `%${q.toLowerCase()}%`;
     const trackRows = this.db
       .prepare(
-        `SELECT * FROM tracks
+        `SELECT ${PUBLIC_TRACK_COLUMNS} FROM tracks
          WHERE LOWER(title) LIKE ? OR LOWER(artist) LIKE ? OR LOWER(album) LIKE ? OR LOWER(album_artist) LIKE ?
          ORDER BY title COLLATE NOCASE LIMIT ?`,
       )
-      .all(term, term, term, term, limit) as TrackRow[];
+      .all(term, term, term, term, limit) as PublicTrackRow[];
     const albumRows = this.db
       .prepare(
         `SELECT * FROM (${this.albumSelect(
@@ -551,13 +566,14 @@ export class LibraryDatabase {
   }
 
   // ── summary ──────────────────────────────────────────────────────
-  summary(libraryPath: string, configured: boolean): LibrarySummary {
+  summary(configured: boolean): LibrarySummary {
     const row = this.db
       .prepare(
         `SELECT
            COUNT(*) AS trackCount,
            COUNT(DISTINCT album_key) AS albumCount,
            COUNT(DISTINCT artist_key) AS artistCount,
+           COUNT(DISTINCT NULLIF(TRIM(genre),'')) AS genreCount,
            COALESCE(SUM(duration),0) AS totalDuration
          FROM tracks`,
       )
@@ -565,17 +581,16 @@ export class LibraryDatabase {
       trackCount: number;
       albumCount: number;
       artistCount: number;
+      genreCount: number;
       totalDuration: number;
     };
-    const genreCount = this.listGenres().length;
     return {
       trackCount: row.trackCount,
       albumCount: row.albumCount,
       artistCount: row.artistCount,
-      genreCount,
+      genreCount: row.genreCount,
       totalDurationSeconds: row.totalDuration,
       configured,
-      libraryPath,
     };
   }
 
