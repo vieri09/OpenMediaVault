@@ -80,6 +80,8 @@ export default function VideoPlayer() {
     (position: number, audioStream?: number, forceCompatibility?: boolean) => void
   >(() => {});
   const recoverPlaybackRef = useRef<() => void>(() => {});
+  const playGenerationRef = useRef(0);
+  const lastRecoveryRef = useRef(0);
   const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const startupTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const bufferingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -91,6 +93,7 @@ export default function VideoPlayer() {
     timer: ReturnType<typeof setTimeout> | null;
   }>({ time: 0, x: 0, pointerType: '', timer: null });
   const subtitleWindowRef = useRef(0);
+  const scrubbingRef = useRef(false);
   const progressRef = useRef({ position: 0, duration: 0 });
 
   const [playing, setPlaying] = useState(false);
@@ -201,9 +204,49 @@ export default function VideoPlayer() {
     ): void => {
       if (disposed) return;
       if (startupTimerRef.current) clearTimeout(startupTimerRef.current);
+      const gen = playGenerationRef.current;
       const started = Date.now();
+      let playRetries = 0;
+      const isInterruptedError = (error: unknown): boolean =>
+        (error instanceof DOMException && error.name === 'AbortError') ||
+        (error instanceof Error && error.message.includes('interrupted'));
+      const attemptPlay = (): void => {
+        if (disposed || playGenerationRef.current !== gen) return;
+        void video.play().catch((error: unknown) => {
+          if (disposed || playGenerationRef.current !== gen) return;
+          if (error instanceof DOMException && error.name === 'NotAllowedError') {
+            setPlaybackError(
+              'The browser requires a tap to start playback. Press the play button.',
+            );
+            return;
+          }
+          if (isInterruptedError(error)) {
+            if (playRetries < 3 && playGenerationRef.current === gen) {
+              playRetries++;
+              setTimeout(attemptPlay, 300);
+              return;
+            }
+            if (playGenerationRef.current !== gen) return;
+            if (recover) { recover(); return; }
+            if (playRetries < 4) {
+              playRetries++;
+              lastRecoveryRef.current = Date.now();
+              setStatus('Retrying playback…');
+              startHlsRef.current(
+                baseOffsetRef.current + video.currentTime,
+                audioStreamRef.current,
+              );
+              return;
+            }
+          }
+          if (recover) { recover(); return; }
+          const message = error instanceof Error ? error.message : 'Unknown media error';
+          if (playGenerationRef.current !== gen) return;
+          setPlaybackError(`Could not start movie playback: ${message}`);
+        });
+      };
       const check = (): void => {
-        if (disposed) return;
+        if (disposed || playGenerationRef.current !== gen) return;
         let bufferAhead = 0;
         try {
           for (let index = 0; index < video.buffered.length; index++) {
@@ -222,18 +265,7 @@ export default function VideoPlayer() {
         if (required <= 0 || bufferAhead >= required || Date.now() - started >= 30_000) {
           startupTimerRef.current = null;
           setStatus('');
-          void video.play().catch((error: unknown) => {
-            if (error instanceof DOMException && error.name === 'NotAllowedError') {
-              // The explicit play button will satisfy the browser gesture requirement.
-              return;
-            }
-            if (recover) {
-              recover();
-              return;
-            }
-            const message = error instanceof Error ? error.message : 'Unknown media error';
-            setPlaybackError(`Could not start movie playback: ${message}`);
-          });
+          attemptPlay();
           return;
         }
         setStatus(
@@ -250,6 +282,7 @@ export default function VideoPlayer() {
       forceCompatibility = false,
     ): void => {
       if (disposed) return;
+      playGenerationRef.current++;
       destroyHls();
       directPlaybackRef.current = false;
       setPlaybackTransport('hls');
@@ -285,6 +318,7 @@ export default function VideoPlayer() {
 
       const fallbackToCompatibility = (): void => {
         if (!disposed && hevcSource) {
+          lastRecoveryRef.current = Date.now();
           setPlaybackError('');
           setStatus('Using browser-compatible high quality…');
           startHls(
@@ -297,18 +331,34 @@ export default function VideoPlayer() {
       recoverPlaybackRef.current = hevcSource
         ? fallbackToCompatibility
         : () => {
-            const mediaError = video.error;
-            const detail = mediaError
-              ? `Media error ${mediaError.code}${mediaError.message ? `: ${mediaError.message}` : ''}`
-              : 'The browser rejected this media stream.';
-            setPlaybackError(detail);
+            if (disposed) return;
+            lastRecoveryRef.current = Date.now();
+            setStatus('Recovering playback…');
+            startHls(
+              baseOffsetRef.current + video.currentTime,
+              audioStreamRef.current,
+              false,
+            );
           };
 
       if (nativeHls) {
+        const nativeRecover = hevcSource
+          ? fallbackToCompatibility
+          : () => {
+              if (disposed) return;
+              lastRecoveryRef.current = Date.now();
+              setStatus('Recovering playback…');
+              startHls(
+                baseOffsetRef.current + video.currentTime,
+                audioStreamRef.current,
+                false,
+              );
+            };
         const startAfterMetadata = (): void =>
-          playWhenBuffered(HLS_START_BUFFER_SECONDS, hevcSource ? fallbackToCompatibility : undefined);
+          playWhenBuffered(HLS_START_BUFFER_SECONDS, nativeRecover);
         const fallback = (): void => {
           if (!disposed && hevcSource) {
+            lastRecoveryRef.current = Date.now();
             video.removeEventListener('loadedmetadata', startAfterMetadata);
             fallbackToCompatibility();
           }
@@ -343,10 +393,16 @@ export default function VideoPlayer() {
       hlsRef.current = hls;
       hls.loadSource(source);
       hls.attachMedia(video);
-      hls.on(
-        Hls.Events.MANIFEST_PARSED,
-        () => playWhenBuffered(HLS_START_BUFFER_SECONDS),
-      );
+      hls.on(Hls.Events.MANIFEST_PARSED, () => {
+        playGenerationRef.current++;
+        playWhenBuffered(HLS_START_BUFFER_SECONDS, () => {
+          if (disposed) return;
+          startHlsRef.current(
+            baseOffsetRef.current + video.currentTime,
+            audioStreamRef.current,
+          );
+        });
+      });
       let mediaRecoveryAttempts = 0;
       hls.on(Hls.Events.ERROR, (_event, data) => {
         if (!data.fatal || disposed) return;
@@ -360,10 +416,13 @@ export default function VideoPlayer() {
         }
         if (data.type === Hls.ErrorTypes.MEDIA_ERROR) {
           if (hevcSource && mediaRecoveryAttempts >= 1) {
+            lastRecoveryRef.current = Date.now();
             startHls(start, requestedAudioStream, true);
             return;
           }
           mediaRecoveryAttempts++;
+          lastRecoveryRef.current = Date.now();
+          playGenerationRef.current++;
           hls.recoverMediaError();
           return;
         }
@@ -379,6 +438,7 @@ export default function VideoPlayer() {
     startHlsRef.current = startHls;
 
     const loadDirectSource = (resumePosition: number, fallbackToHls: boolean): void => {
+      playGenerationRef.current++;
       directPlaybackRef.current = true;
       setPlaybackTransport('direct');
       baseOffsetRef.current = 0;
@@ -392,6 +452,7 @@ export default function VideoPlayer() {
       };
       const fallback = (): void => {
         if (!disposed && fallbackToHls) {
+          lastRecoveryRef.current = Date.now();
           video.removeEventListener('loadedmetadata', onLoadedMetadata);
           directPlaybackRef.current = false;
           setStatus('Using optimized high-quality playback…');
@@ -605,6 +666,7 @@ export default function VideoPlayer() {
   };
 
   const commitTimelineSeek = (target: number): void => {
+    scrubbingRef.current = false;
     setSeekingPosition(null);
     seek(target);
     pokeControls();
@@ -711,7 +773,14 @@ export default function VideoPlayer() {
         }}
         onRateChange={(event) => setPlaybackRate(event.currentTarget.playbackRate)}
         onError={() => {
-          if (videoRef.current?.currentSrc) recoverPlaybackRef.current();
+          if (!videoRef.current?.currentSrc) return;
+          const now = Date.now();
+          if (now - lastRecoveryRef.current < 2_000) {
+            setStatus('Recovering playback…');
+            return;
+          }
+          lastRecoveryRef.current = now;
+          recoverPlaybackRef.current();
         }}
         onEnded={() => {
           setPlaying(false);
@@ -861,15 +930,33 @@ export default function VideoPlayer() {
             max={duration || 0}
             step={0.5}
             value={Math.min(displayPosition, duration || 0)}
-            onChange={(event) => setSeekingPosition(Number.parseFloat(event.target.value))}
-            onPointerUp={(event) =>
-              commitTimelineSeek(Number.parseFloat(event.currentTarget.value))
-            }
-            onKeyUp={(event) =>
-              commitTimelineSeek(Number.parseFloat(event.currentTarget.value))
-            }
+            onPointerDown={() => {
+              scrubbingRef.current = true;
+            }}
+            onChange={(event) => {
+              if (scrubbingRef.current) {
+                setSeekingPosition(Number.parseFloat(event.target.value));
+              }
+            }}
+            onMouseUp={(event) => {
+              if (scrubbingRef.current) {
+                commitTimelineSeek(Number.parseFloat(event.currentTarget.value));
+              }
+            }}
+            onTouchEnd={(event) => {
+              if (scrubbingRef.current) {
+                commitTimelineSeek(Number.parseFloat(event.currentTarget.value));
+              }
+            }}
+            onKeyUp={(event) => {
+              if (event.key === 'ArrowLeft' || event.key === 'ArrowRight') {
+                commitTimelineSeek(Number.parseFloat(event.currentTarget.value));
+              }
+            }}
             onBlur={() => {
-              if (seekingPosition !== null) commitTimelineSeek(seekingPosition);
+              if (scrubbingRef.current && seekingPosition !== null) {
+                commitTimelineSeek(seekingPosition);
+              }
             }}
             style={{ '--slider-progress': `${Math.min(100, progressPercent)}%` } as React.CSSProperties}
             aria-label="Movie position"

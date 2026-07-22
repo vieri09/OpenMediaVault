@@ -2,6 +2,11 @@ import type {
   AlbumDetail,
   AlbumSortKey,
   ArtistDetail,
+  Book,
+  BookFolderPage,
+  BookProgress,
+  BookSortKey,
+  BookSummary,
   Genre,
   LibrarySummary,
   Movie,
@@ -154,3 +159,48 @@ export const stopMovieHls = (id: string, playbackSessionId: string): Promise<Res
     `${BASE}/movies/${id}/hls${qs({ session: playbackSessionId })}`,
     { method: 'DELETE', keepalive: true },
   );
+
+// ── book API ──────────────────────────────────────────────────────
+export const bookSummary = () => getJSON<BookSummary>('/books/summary');
+export const bookScanStatus = () => getJSON<ScanStatus>('/books/scan/status');
+export const rescanBooks = () =>
+  fetch(`${BASE}/books/rescan`, { method: 'POST' }).then((r) => {
+    if (!r.ok) throw new ApiError(r.status, r.statusText);
+    return r.json() as Promise<ScanStatus>;
+  });
+export const books = (opts: {
+  sort?: BookSortKey;
+  order?: SortOrder;
+  page?: number;
+  limit?: number;
+  search?: string;
+} = {}) =>
+  getJSON<PageResult<Book>>(
+    `/books${qs(opts as Record<string, string | number | undefined>)}`,
+  );
+export const bookFolder = (id = 'root') =>
+  getJSON<BookFolderPage>(id === 'root' ? '/books/folders' : `/books/folders/${id}`);
+export const book = (id: string) => getJSON<Book>(`/books/${id}`);
+export const bookFileUrl = (id: string): string => `${BASE}/books/${id}/file`;
+export const bookThumbnailUrl = (id: string): string => `${BASE}/books/${id}/thumbnail`;
+export const bookPageUrl = (id: string, page: number): string =>
+  `${BASE}/books/${id}/page/${page}`;
+
+export const continueReading = (limit = 12) =>
+  getJSON<Book[]>(`/books/continue${qs({ limit })}`);
+
+export const saveBookProgress = async (id: string, page: number) => {
+  const response = await fetch(`${BASE}/books/${id}/progress`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ page }),
+    keepalive: true,
+  });
+  if (!response.ok) throw new ApiError(response.status, response.statusText);
+  return (await response.json()) as BookProgress;
+};
+
+export const clearBookProgress = async (id: string) => {
+  const response = await fetch(`${BASE}/books/${id}/progress`, { method: 'DELETE' });
+  if (!response.ok) throw new ApiError(response.status, response.statusText);
+};

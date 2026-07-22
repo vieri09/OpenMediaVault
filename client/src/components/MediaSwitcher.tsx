@@ -1,4 +1,4 @@
-import { Clapperboard, Music2 } from 'lucide-react';
+import { BookOpen, Clapperboard, Music2 } from 'lucide-react';
 import { NavLink } from 'react-router-dom';
 
 export default function MediaSwitcher() {
@@ -14,6 +14,10 @@ export default function MediaSwitcher() {
       <NavLink to="/movie" className={linkClass}>
         <Clapperboard size={15} />
         <span>Movie</span>
+      </NavLink>
+      <NavLink to="/book" className={linkClass}>
+        <BookOpen size={15} />
+        <span>Book</span>
       </NavLink>
     </nav>
   );

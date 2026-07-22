@@ -26,6 +26,10 @@ const Movies = lazy(() => import('./pages/Movies.tsx'));
 const MovieDetail = lazy(() => import('./pages/MovieDetail.tsx'));
 const ContinueWatching = lazy(() => import('./pages/ContinueWatching.tsx'));
 const VideoPlayer = lazy(() => import('./pages/VideoPlayer.tsx'));
+const BookApp = lazy(() => import('./BookApp.tsx'));
+const Books = lazy(() => import('./pages/Books.tsx'));
+const BookReader = lazy(() => import('./pages/BookReader.tsx'));
+const ContinueReading = lazy(() => import('./pages/ContinueReading.tsx'));
 
 const pageFallback = <div className="loading"><div className="spinner" />Loading…</div>;
 
@@ -69,6 +73,18 @@ ReactDOM.createRoot(document.getElementById('root')!).render(
           <Route
             path="/movie/watch/:id"
             element={<Suspense fallback={pageFallback}><VideoPlayer /></Suspense>}
+          />
+          <Route path="/book" element={<BookApp />}>
+            <Route element={<Suspense fallback={pageFallback}><Outlet /></Suspense>}>
+              <Route index element={<Books />} />
+              <Route path="continue" element={<ContinueReading />} />
+              <Route path="folder/:folderId" element={<Books />} />
+              <Route path="*" element={<Navigate to="/book" replace />} />
+            </Route>
+          </Route>
+          <Route
+            path="/book/read/:id"
+            element={<Suspense fallback={pageFallback}><BookReader /></Suspense>}
           />
           <Route path="/albums/*" element={<LegacyRedirect from="/albums" to="/music/albums" />} />
           <Route path="/artists/*" element={<LegacyRedirect from="/artists" to="/music/artists" />} />

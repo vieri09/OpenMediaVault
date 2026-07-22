@@ -278,12 +278,12 @@ function transcodeArgs(
     args.push(
       '-af',
       'aresample=async=1:first_pts=0',
+      '-ac',
+      '2',
       '-c:a',
       'aac',
       '-b:a',
-      '512k',
-      '-aac_coder',
-      'twoloop',
+      '256k',
     );
   }
 

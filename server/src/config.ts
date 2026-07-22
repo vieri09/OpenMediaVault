@@ -40,6 +40,8 @@ export interface AppConfig {
   libraryPath: string;
   /** Optional absolute path to the local movie library. */
   movieLibraryPath: string | null;
+  /** Optional absolute path to the local book library. */
+  bookLibraryPath: string | null;
   /** Port the HTTP server listens on. */
   port: number;
   /** Interface to bind. Loopback by default so the unauthenticated library stays local. */
@@ -85,6 +87,8 @@ export function loadConfig(): AppConfig {
   const libraryPath = resolveFromRoot(rawLibrary);
   const rawMovieLibrary = process.env.MOVIE_LIBRARY_PATH?.trim();
   const movieLibraryPath = rawMovieLibrary ? resolveFromRoot(rawMovieLibrary) : null;
+  const rawBookLibrary = process.env.BOOK_LIBRARY_PATH?.trim();
+  const bookLibraryPath = rawBookLibrary ? resolveFromRoot(rawBookLibrary) : null;
 
   const port = Number.parseInt(process.env.APP_PORT ?? '3000', 10);
   if (!Number.isFinite(port) || port <= 0 || port > 65535) {
@@ -117,10 +121,18 @@ export function loadConfig(): AppConfig {
   ) {
     throw new Error(`MOVIE_LIBRARY_PATH "${movieLibraryPath}" exists but is not a directory.`);
   }
+  if (
+    bookLibraryPath &&
+    fs.existsSync(bookLibraryPath) &&
+    !fs.statSync(bookLibraryPath).isDirectory()
+  ) {
+    throw new Error(`BOOK_LIBRARY_PATH "${bookLibraryPath}" exists but is not a directory.`);
+  }
 
   return {
     libraryPath,
     movieLibraryPath,
+    bookLibraryPath,
     port,
     host,
     databasePath,

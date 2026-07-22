@@ -13,6 +13,9 @@ import { VideoDatabase } from './video-db.ts';
 import { VIDEO_PROBE_VERSION } from './video-probe.ts';
 import { VideoScanner } from './video-scanner.ts';
 import { VideoTranscoder } from './video-transcode.ts';
+import { BookDatabase } from './book-db.ts';
+import { BookScanner } from './book-scanner.ts';
+import { buildBookRouter } from './book-routes.ts';
 
 /**
  * Project root, resolved from this source file so it is independent of the
@@ -28,6 +31,8 @@ export interface AppDeps {
   videoDb?: VideoDatabase;
   videoScanner?: VideoScanner;
   videoTranscoder?: VideoTranscoder;
+  bookDb?: BookDatabase;
+  bookScanner?: BookScanner;
 }
 
 export function createApp(deps: AppDeps = {}) {
@@ -38,6 +43,8 @@ export function createApp(deps: AppDeps = {}) {
   const videoDb = deps.videoDb ?? new VideoDatabase(cfg.databasePath);
   const videoScanner = deps.videoScanner ?? new VideoScanner(cfg, videoDb);
   const videoTranscoder = deps.videoTranscoder ?? new VideoTranscoder(cfg.databasePath);
+  const bookDb = deps.bookDb ?? new BookDatabase(cfg.databasePath);
+  const bookScanner = deps.bookScanner ?? new BookScanner(cfg, bookDb);
 
   const app = express();
   app.disable('x-powered-by');
@@ -91,6 +98,7 @@ export function createApp(deps: AppDeps = {}) {
   });
   app.use('/api', buildRouter({ cfg, db, scanner }));
   app.use('/api', buildVideoRouter({ cfg, videoDb, videoScanner, videoTranscoder }));
+  app.use('/api', buildBookRouter({ cfg, bookDb, bookScanner }));
 
   // Production: serve the built client SPA if it exists.
   const clientDist = path.resolve(PROJECT_ROOT, 'client/dist');
@@ -138,7 +146,7 @@ export function createApp(deps: AppDeps = {}) {
     res.status(500).json({ error: 'Internal server error.', code: 'INTERNAL' });
   });
 
-  return { app, cfg, db, scanner, videoDb, videoScanner, videoTranscoder };
+  return { app, cfg, db, scanner, videoDb, videoScanner, videoTranscoder, bookDb, bookScanner };
 }
 
 async function bootstrap(): Promise<void> {
@@ -152,13 +160,14 @@ async function bootstrap(): Promise<void> {
   }
   setLogLevel(cfg.logLevel);
 
-  const { app, db, scanner, videoDb, videoScanner, videoTranscoder } = createApp({ cfg });
+  const { app, db, scanner, videoDb, videoScanner, videoTranscoder, bookDb, bookScanner } = createApp({ cfg });
 
   const server = app.listen(cfg.port, cfg.host, () => {
     log.info(`OpenMedia server listening on http://${cfg.host}:${cfg.port}`);
     log.info(`Music library: ${cfg.libraryPath}`);
     log.info(`Database:      ${cfg.databasePath}`);
     if (cfg.movieLibraryPath) log.info(`Movie library: ${cfg.movieLibraryPath}`);
+    if (cfg.bookLibraryPath) log.info(`Book library:   ${cfg.bookLibraryPath}`);
     if (!fs.existsSync(cfg.libraryPath)) {
       log.warn(
         `Library folder does not exist yet. Set MUSIC_LIBRARY_PATH in .env to your music folder, then trigger a rescan.`,
@@ -193,6 +202,16 @@ async function bootstrap(): Promise<void> {
         void videoScanner.scan();
       }
     }
+    if (cfg.bookLibraryPath && fs.existsSync(cfg.bookLibraryPath)) {
+      const lastBookLibrary = bookDb.getMeta('book_library_path');
+      if (
+        bookDb.count() === 0 ||
+        lastBookLibrary !== cfg.bookLibraryPath
+      ) {
+        log.info('Book library needs indexing; starting a background book scan…');
+        void bookScanner.scan();
+      }
+    }
   });
 
   // Surface a bind failure — almost always a port clash with another dev
@@ -215,6 +234,7 @@ async function bootstrap(): Promise<void> {
       db.close();
       videoDb.close();
       videoTranscoder.close();
+      bookDb.close();
     } catch {
       /* ignore */
     }

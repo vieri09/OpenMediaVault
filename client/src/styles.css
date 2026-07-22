@@ -171,8 +171,8 @@ select {
   white-space: nowrap;
 }
 .media-switcher {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  display: flex;
+  flex-direction: column;
   gap: 4px;
   margin-top: 12px;
   padding: 4px;
@@ -204,6 +204,10 @@ select {
 .movie-app .media-switcher-link.active {
   background: #e50914;
   color: #fff;
+}
+.book-app .media-switcher-link.active {
+  background: #f59e0b;
+  color: #0d0d0f;
 }
 
 .main {
@@ -924,6 +928,10 @@ input[type='range']::-moz-range-progress {
 .movie-palette .palette-item.focused {
   background: rgba(229, 9, 20, 0.14);
 }
+.book-palette .palette-item:hover,
+.book-palette .palette-item.focused {
+  background: rgba(245, 158, 11, 0.14);
+}
 .palette-item img.movie-palette-thumb {
   width: 62px;
   height: 35px;
@@ -1393,28 +1401,6 @@ input[type='range']::-moz-range-progress {
   color: var(--text-faint);
   box-shadow: 0 14px 32px rgba(0, 0, 0, 0.28);
 }
-.movie-folder-card.has-subfolders .movie-folder-image {
-  border-color: rgba(229, 9, 20, 0.32);
-  background:
-    radial-gradient(circle at 74% 18%, rgba(229, 9, 20, 0.17), transparent 36%),
-    var(--surface);
-  box-shadow:
-    inset 0 3px 0 rgba(229, 9, 20, 0.72),
-    0 14px 32px rgba(0, 0, 0, 0.3);
-}
-.movie-folder-card.has-subfolders .movie-folder-image::after {
-  content: '';
-  position: absolute;
-  inset: 7px 7px auto auto;
-  width: 34px;
-  height: 5px;
-  border-radius: 999px;
-  background: rgba(229, 9, 20, 0.86);
-  box-shadow:
-    -5px 6px 0 rgba(229, 9, 20, 0.42),
-    -10px 12px 0 rgba(229, 9, 20, 0.2);
-  pointer-events: none;
-}
 .movie-folder-image img {
   width: 100%;
   height: 100%;
@@ -1440,10 +1426,6 @@ input[type='range']::-moz-range-progress {
   letter-spacing: 0.06em;
   text-transform: uppercase;
   backdrop-filter: blur(10px);
-}
-.movie-folder-card.has-subfolders .movie-folder-image > span {
-  background: rgba(151, 7, 15, 0.88);
-  color: #fff;
 }
 .movie-folder-copy {
   min-width: 0;
@@ -1492,14 +1474,6 @@ input[type='range']::-moz-range-progress {
   width: 168px;
   border-radius: 8px;
   box-shadow: none;
-}
-.movie-folder-grid.is-list .movie-folder-card.has-subfolders .movie-folder-image {
-  border-color: rgba(255, 255, 255, 0.05);
-  background: var(--surface);
-  box-shadow: none;
-}
-.movie-folder-grid.is-list .movie-folder-card.has-subfolders .movie-folder-image::after {
-  display: none;
 }
 .movie-folder-grid.is-list .movie-folder-card h3 {
   margin: 0 0 5px;
@@ -2191,6 +2165,199 @@ kbd {
   color: var(--text-muted);
 }
 
+/* ── Book reader ─────────────────────────────────────────────────── */
+.book-reader {
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  overflow: hidden;
+  background: #000;
+  color: #fff;
+  user-select: none;
+  position: relative;
+}
+
+.book-pages {
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  scroll-behavior: smooth;
+  -webkit-overflow-scrolling: touch;
+}
+
+.book-page-wrapper {
+  position: relative;
+  text-align: center;
+}
+
+/* Placeholder reserves vertical space before the image loads so scroll
+   position stays stable. Typical comic aspect ratio is ~2:3. */
+.book-page-placeholder {
+  aspect-ratio: 2 / 3;
+  min-height: 300px;
+  width: 100%;
+}
+
+.book-page-skeleton {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  min-height: 300px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 4px;
+}
+
+.book-page-skeleton .spinner {
+  width: 32px;
+  height: 32px;
+  margin-bottom: 12px;
+}
+
+.book-page-skeleton-num {
+  color: rgba(255, 255, 255, 0.25);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+
+.book-page-img {
+  display: block;
+  margin: 0 auto;
+  width: auto;
+  height: auto;
+  max-width: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}
+
+.book-page-num {
+  position: absolute;
+  bottom: 8px;
+  right: 12px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.55);
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}
+
+/* Top bar — clean, no panel, gradient vignette behind it */
+.book-vignette {
+  position: absolute;
+  z-index: 2;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0;
+  background:
+    linear-gradient(180deg, rgba(0, 0, 0, 0.66) 0%, transparent 22%),
+    linear-gradient(0deg, rgba(0, 0, 0, 0.82) 0%, transparent 30%);
+  transition: opacity 0.22s;
+}
+.book-controls-visible .book-vignette {
+  opacity: 1;
+}
+
+.book-topbar {
+  position: absolute;
+  z-index: 4;
+  top: max(24px, env(safe-area-inset-top));
+  left: max(24px, env(safe-area-inset-left));
+  right: max(24px, env(safe-area-inset-right));
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  opacity: 0;
+  transform: translateY(-8px);
+  pointer-events: none;
+  transition: opacity 0.2s, transform 0.2s;
+}
+.book-controls-visible .book-topbar {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+/* Bottom controls — clean, no panel, gradient vignette behind it */
+.book-controls {
+  position: absolute;
+  z-index: 4;
+  left: max(28px, env(safe-area-inset-left));
+  right: max(28px, env(safe-area-inset-right));
+  bottom: max(22px, env(safe-area-inset-bottom));
+  opacity: 0;
+  transform: translateY(14px);
+  pointer-events: none;
+  transition: opacity 0.2s, transform 0.2s;
+}
+.book-controls-visible .book-controls {
+  opacity: 1;
+  transform: translateY(0);
+  pointer-events: auto;
+}
+
+/* Book controls keep zoom slider + page counter on mobile
+   (global responsive hides .video-volume / .video-time at 820px) */
+.book-controls .video-volume,
+.book-controls .video-time,
+.book-controls .video-mode {
+  display: revert;
+}
+
+.book-timeline {
+  position: relative;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  margin-bottom: 2px;
+}
+.book-timeline input {
+  position: relative;
+  z-index: 2;
+  width: 100%;
+  flex: none;
+  background: linear-gradient(
+    to right,
+    #f59e0b 0%,
+    #f59e0b var(--slider-progress, 0%),
+    rgba(255, 255, 255, 0.28) var(--slider-progress, 0%),
+    rgba(255, 255, 255, 0.28) 100%
+  );
+}
+
+/* Book card tweaks */
+.book-card .movie-thumb-fallback {
+  display: grid;
+  place-items: center;
+  color: var(--text-faint);
+  background:
+    radial-gradient(circle at 75% 20%, rgba(245, 158, 11, 0.12), transparent 34%),
+    var(--surface);
+}
+.book-card .movie-card-image {
+  aspect-ratio: 3 / 4;
+}
+.book-card .movie-card-image img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #0a0a0c;
+}
+
+.hidden {
+  display: none !important;
+}
+
+/* Book controls active state */
+.video-mode.active {
+  background: rgba(245, 158, 11, 0.25);
+  border-color: #f59e0b;
+  color: #f59e0b;
+}
+
 /* ── Responsive ─────────────────────────────────────────────────── */
 @media (max-width: 820px) {
   .app {
@@ -2396,5 +2563,37 @@ kbd {
   .video-track-picker select {
     max-width: 76px;
     font-size: 9px;
+  }
+}
+
+/* ── Book mobile tweaks ─────────────────────────────────────────── */
+@media (max-width: 820px) {
+  .book-controls {
+    left: 14px;
+    right: 14px;
+    bottom: max(12px, env(safe-area-inset-bottom));
+  }
+  .book-topbar {
+    top: max(14px, env(safe-area-inset-top));
+    left: max(14px, env(safe-area-inset-left));
+    right: max(14px, env(safe-area-inset-right));
+  }
+  .book-controls .video-control-row {
+    gap: 6px;
+  }
+  .book-zoom-slider {
+    width: 56px !important;
+  }
+}
+@media (max-width: 560px) {
+  .book-page-num {
+    display: none;
+  }
+  .book-controls .video-control-button {
+    width: 34px;
+    height: 34px;
+  }
+  .book-zoom-slider {
+    width: 44px !important;
   }
 }

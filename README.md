@@ -1,116 +1,172 @@
 # OpenMedia
 
-A self-hosted, browser-based player for music and movies stored on your own
-drives. Dark, minimalist, keyboard-driven, and **private by design** — there is
-no account system, no login, no cloud, and no streaming service. It scans local
-folders you choose, caches metadata in SQLite, and plays your media in the
-browser.
+**Your drives. Your media. A private player that actually feels good to use.**
 
-Inspired by the architecture and UI of
-[Monochrome](https://github.com/monochrome-music/monochrome), but re-imagined as
-a much simpler **local-file** player instead of a TIDAL/streaming client. All
-account, social, and cloud features have been intentionally removed.
+OpenMedia is a self-hosted, browser-based player for the music, movies, and
+books you've already got on your computer. Point it at a folder, open the
+browser, and that's it — no account, no login, no cloud, no subscription. The
+app reads your files, builds a local search index, and plays them in a dark,
+keyboard-friendly interface.
+
+It's built for **one person on one machine** who wants their library back under
+their own roof.
+
+---
+
+## 📸 Screenshots
+
+### 🎵 Music
+
+![Music library](docs/screenshots/OpenMedia-Music-Library.png)
+
+![Music player](docs/screenshots/OpenMedia-Music-Player.png)
+
+### 🎬 Movies
+
+![Movie library](docs/screenshots/OpenMedia-Movie-Library.png)
+
+![Movie player](docs/screenshots/OpenMedia-Movie-Player.png)
+
+### 📚 Books
+
+![Book library](docs/screenshots/OpenMedia-Book-Library.png)
+
+![Book reader](docs/screenshots/OpenMedia-Book-Reader.png)
+
+---
+
+## What it does
+
+At a glance: OpenMedia turns three folders (one for music, one for movies, one
+for books) into a single, fast, searchable player.
+
+- **No accounts.** No login screen, no signup, no "sign in with Google." Your
+  preferences live in your own browser. Nothing is sent anywhere.
+- **Local-first.** Files stay on your drive. The server reads them; the browser
+  streams them. There is no third party in the loop.
+- **Searchable library.** Once it scans your folder, everything — tracks,
+  albums, artists, genres, movies, books — is one search away. Open the command
+  palette with `⌘K` / `Ctrl+K` and start typing.
+- **Smart video.** MP4 plays directly. MKV, AVI, HEVC, weird audio — OpenMedia
+  spins up a quick FFmpeg session in the background and serves the result as
+  HLS so it works in any modern browser.
+- **Resume where you stopped.** Movies remember their position. The "Continue
+  Watching" row picks up exactly where you left off.
 
 ---
 
 ## ✨ Features
 
-- **Scans a local folder recursively** for `mp3`, `flac`, `wav`, `m4a`, `aac`,
-  `ogg`, `opus` (and configurable extras).
-- **Reads embedded metadata** — title, artist, album, album artist, genre, year,
-  duration, track/disc number, and embedded cover art.
-- **Metadata cache (SQLite)** so the app starts instantly and never re-scans
-  unchanged files.
-- **Manual "Rescan Library"** with live progress.
-- **HTTP audio streaming with full Range support** for instant seeking.
-- **Browse** by Library, Albums, Artists, Genres, and Songs, with sorting.
-- **Album detail** and **Artist detail** pages.
-- **Search** across tracks, albums, and artists (plus a ⌘/Ctrl+K command palette).
-- **Now Playing** view, **Queue** panel, **player bar** with play/pause,
-  next/previous, seek, volume, shuffle, and repeat (off / all / one).
-- **Keyboard shortcuts** (see below) matching Monochrome's scheme.
-- **Media Session API** integration — hardware media keys and OS media controls
-  work.
-- **PWA** install support.
-- **Local preferences** saved in the browser: volume, shuffle/repeat, queue,
-  recently played, and favorites. **No server-side accounts.**
-- **Local movie library** for MP4, M4V, MKV and AVI files.
-- **Optimized video playback:** compatible H.264 MP4 plays directly; MKV, AVI,
-  HEVC/H.265 and incompatible audio use an on-demand FFmpeg → HLS session.
-- **Hardware H.264 encoding on macOS** through VideoToolbox when available,
-  with a constrained `libx264` fallback elsewhere.
-- **Lazy local thumbnails**, movie search/sorting, resume progress, and
-  Continue Watching.
+### Music
+- Scans a folder recursively for `mp3`, `flac`, `wav`, `m4a`, `aac`, `ogg`,
+  `opus` (and any extras you want to add).
+- Reads embedded metadata: title, artist, album, album artist, genre, year,
+  duration, track/disc number, and cover art.
+- Browses by **Library**, **Albums**, **Artists**, **Genres**, and **Songs**.
+- Album and artist detail pages.
+- A bottom-bar player with play/pause, next/previous, seek, volume, shuffle,
+  and repeat (off / all / one).
+- A slide-out **Queue** panel and a full **Now Playing** view.
+- `⌘K` / `Ctrl+K` command palette.
+- Media Session API: hardware media keys and OS media controls just work.
+
+### Movies
+- Scans a folder for `mp4`, `m4v`, `mkv`, and `avi`.
+- MP4 / M4V with H.264 plays natively with instant seek.
+- MKV, AVI, HEVC, and other oddities get on-the-fly HLS transcoding so they
+  play in the browser anyway.
+- Hardware H.264 encoding on macOS via VideoToolbox; software `libx264`
+  fallback everywhere else.
+- Multi-audio-track selection for movies that ship with several languages.
+- Text subtitles (SRT, ASS, WebVTT, mov_text) work; image-based ones (PGS) don't.
+- Lazy thumbnails, resume progress, "Continue Watching".
+
+### Books
+- Browse a folder of books in a clean library view.
+- Open any book in a built-in reader.
+
+### Everywhere
+- Keyboard shortcuts everywhere (see below).
+- Installable as a **PWA** — pop it on the dock / taskbar like a native app.
+- Light / dark UI honoring your system preference.
+- All preferences stored locally: volume, shuffle, repeat, queue, recently
+  played, favorites. **No server-side accounts.**
 
 ---
 
 ## 🧱 Architecture
 
+If you're just here to run it, **skip this section.** Below is a quick map of
+the code if you want to poke around or contribute.
+
 ```
 OpenMedia-v2/
-├── package.json            # npm workspaces (server + client), dev/build/test scripts
-├── .env / .env.example     # configuration (music folder, port, db path)
-└── server/                 # Node + Express + TypeScript backend
-    └── src/
-        ├── config.ts       # env → typed config + validation
-        ├── paths.ts        # secure path resolution (anti-traversal chokepoint)
-        ├── db.ts           # better-sqlite3 schema + queries (whitelisted sorts)
-        ├── metadata.ts     # music-metadata parsing → normalized track
-        ├── scanner.ts      # recursive scan, incremental (mtime+size), pruning
-        ├── stream.ts       # Range-request audio streaming
-        ├── routes.ts       # all API endpoints
-        ├── logger.ts       # leveled logging
-        └── index.ts        # Express app, error middleware, optional SPA serving
+├── package.json            # npm workspaces (server + client)
+├── .env / .env.example     # your music folder, port, db path
+│
+├── server/                 # Node + Express + TypeScript backend
+│   └── src/
+│       ├── config.ts       # reads .env, validates
+│       ├── paths.ts        # anti-traversal guard for streams/covers
+│       ├── db.ts           # SQLite schema + queries
+│       ├── metadata.ts     # parses music files into track rows
+│       ├── scanner.ts      # walk the folder, pick up new/deleted files
+│       ├── stream.ts       # HTTP Range audio streaming
+│       ├── routes.ts       # every /api/* endpoint
+│       └── index.ts        # Express app entry point
+│
 └── client/                 # React + Vite + TypeScript frontend
     └── src/
-        ├── api.ts          # typed fetch client
-        ├── stores/         # zustand: player/queue, library (favorites/recent), ui
-        ├── hooks/          # useKeyboard, useMediaSession
-        ├── components/     # Player, QueuePanel, CommandPalette, TrackList, Grids…
-        ├── pages/          # Library, Albums, AlbumDetail, Artists, ArtistDetail,
-        │                   #   Songs, Genres, Search, NowPlaying
-        └── styles.css      # dark minimalist CSS variables
+        ├── api.ts          # tiny typed fetch client
+        ├── stores/         # zustand: player, library, UI
+        ├── hooks/          # keyboard, media session
+        ├── components/     # Player, Queue, CommandPalette, lists, grids…
+        └── pages/          # Library, Albums, Artists, Search, NowPlaying…
 ```
 
-**Key choices**
+**Why this shape?**
 
-| Concern | Choice | Why |
-|---|---|---|
-| Frontend | React + Vite + TypeScript | Componentized pages are maintainable; TS catches bugs |
-| State | `zustand` | Tiny, ergonomic player/queue state machine |
-| Data fetching | `SWR` | Caching, refetch, dedupe with one small dep |
-| Search | server SQL `LIKE` + client command palette | Robust for large libraries, paginated |
-| Backend | Express + `better-sqlite3` + `music-metadata` | Simple, fast, no external services |
-| Security | clients reference **track IDs only** | No arbitrary filesystem access; all lookups go through `resolveWithin()` |
+- **React + Vite + TypeScript** on the front so pages are easy to keep up to
+  date and the compiler catches bugs at write-time.
+- **Express + SQLite** on the back because for one user, one machine, that's
+  plenty of power and zero ops.
+- **State lives in zustand**, persisted to `localStorage`. Simple, fast,
+  no boilerplate.
+- **Security:** the browser only ever asks for a track by its ID (a SHA-1 of
+  the file path). It can never ask "give me `/etc/passwd`" — there is no path
+  the server will trust.
 
 ---
 
 ## 🚀 Quick start
 
-> **Requirements:** Node.js 20+, npm, and [ffmpeg](https://ffmpeg.org/) +
-> `ffprobe` for movie scanning/playback and ALAC compatibility conversion.
+You'll need: **Node.js 20+**, **npm**, and **`ffmpeg`** + **`ffprobe`**
+(installed once on your system; required for movie transcoding and ALAC).
 
-### 1. Install dependencies
+### 1. Install
 
 ```bash
 npm install
 ```
 
-This installs both the `server` and `client` workspaces.
+### 2. Tell OpenMedia where your stuff lives
 
-### 2. Point the app at your music folder
-
-Create a `.env` at the project root (or copy `.env.example`) and set
-`MUSIC_LIBRARY_PATH` to the folder that holds your music:
+Copy the example env file and edit it:
 
 ```bash
 cp .env.example .env
-# then edit .env:
-MUSIC_LIBRARY_PATH=/path/to/your/music
-MOVIE_LIBRARY_PATH=/path/to/your/movies
 ```
 
-The folder is scanned recursively. Example layout:
+Open `.env` and point the paths at your folders:
+
+```bash
+MUSIC_LIBRARY_PATH=/path/to/your/music
+MOVIE_LIBRARY_PATH=/path/to/your/movies
+BOOK_LIBRARY_PATH=/path/to/your/books
+```
+
+Folders are scanned recursively. Anything in there becomes part of the
+library. Example music layout:
 
 ```
 /path/to/your/music
@@ -129,96 +185,32 @@ The folder is scanned recursively. Example layout:
 npm run dev
 ```
 
-This starts **both** the backend API (Express, on `APP_PORT`, default `3000`)
-and the frontend (Vite, on port `5173`). With the default
-`APP_HOST=127.0.0.1`, open the app in your browser:
+Open <http://localhost:5173> and you're in.
 
-```
-http://localhost:5173
-```
+On first launch, if the library is empty the backend **scans automatically**
+so you don't have to wait. After that, the cache makes startup instant. Hit
+**"Rescan Library"** in the sidebar any time you add new files.
 
-To use development mode from another device on the same trusted Wi-Fi, set
-`APP_HOST=0.0.0.0`, restart `npm run dev`, and open
-`http://<this-computer's-LAN-IP>:5173` on that device.
-
-On first launch, if the library is empty the backend **scans automatically**.
-After that it boots instantly from the cache. You can always trigger a rescan
-from the **“Rescan Library”** button in the sidebar.
+**Want to use it from your phone on the same Wi-Fi?** Set `APP_HOST=0.0.0.0`,
+restart `npm run dev`, and open `http://<this-machine's-LAN-IP>:5173`. Only do
+this on a network you trust — there is no login.
 
 ---
 
 ## ⚙️ Configuration
 
-All settings live in `.env` at the project root (read by the server on startup).
+Everything lives in `.env` at the repo root.
 
-| Variable | Default | Description |
+| Variable | Default | What it does |
 |---|---|---|
 | `MUSIC_LIBRARY_PATH` | `./music` | Folder scanned recursively for audio. **Set this to your music.** |
-| `MOVIE_LIBRARY_PATH` | _(unset)_ | Optional folder scanned recursively for MP4, M4V, MKV and AVI movies. |
-| `APP_PORT` | `3000` | Port for the backend API (and the production SPA). |
-| `APP_HOST` | `127.0.0.1` | Interface to bind. Use `0.0.0.0` only for intentional LAN access. |
-| `DATABASE_PATH` | `./data/library.db` | Where the SQLite metadata cache lives. |
-| `EXTRA_AUDIO_EXTENSIONS` | _(empty)_ | Comma-separated extra extensions, e.g. `aif,m4b,caf`. |
+| `MOVIE_LIBRARY_PATH` | _(unset)_ | Optional folder scanned for `mp4`, `m4v`, `mkv`, `avi` movies. |
+| `BOOK_LIBRARY_PATH` | _(unset)_ | Optional folder scanned for books. |
+| `APP_PORT` | `3000` | Backend API port (and the production SPA in single-port mode). |
+| `APP_HOST` | `127.0.0.1` | Interface to bind. Use `0.0.0.0` **only** for intentional LAN access. |
+| `DATABASE_PATH` | `./data/library.db` | Where the SQLite metadata cache is stored. |
+| `EXTRA_AUDIO_EXTENSIONS` | _(empty)_ | Comma-separated extras, e.g. `aif,m4b,caf`. |
 | `LOG_LEVEL` | `info` | One of `debug`, `info`, `warn`, `error`. |
-
----
-
-## 🔄 Scanning & rescanning
-
-- The scanner walks `MUSIC_LIBRARY_PATH` recursively, skipping dotfiles/hidden
-  directories.
-- **Incremental:** a file is only re-parsed when its size or modification time
-  changed. Everything else is skipped, so rescans are fast.
-- Files deleted from disk are **pruned** from the cache automatically.
-- **Trigger a rescan** at any time:
-  - In the app: **“Rescan Library”** in the sidebar (shows live progress).
-  - Via API: `POST http://localhost:3000/api/rescan`, then poll
-    `GET /api/scan/status`.
-
----
-
-## 🎵 Supported formats
-
-`mp3`, `flac`, `wav`, `m4a`, `aac`, `ogg`, `opus` (+ `oga`, `weba`, `wma` on a
-best-effort basis). Add rare formats with `EXTRA_AUDIO_EXTENSIONS`. Music is
-streamed as its original bytes whenever the browser supports it. ALAC audio
-inside M4A is converted losslessly to FLAC on first playback and cached under
-`data/transcodes`; no audio information is discarded.
-
-## 🎬 Movie playback
-
-- The movie library mirrors the directory tree under `MOVIE_LIBRARY_PATH`.
-  Folders and videos are sorted alphabetically; OpenMedia does not guess show,
-  season, episode, OVA, or special metadata from filenames.
-- MP4/M4V containing H.264 video and AAC/MP3 audio uses native browser playback
-  with HTTP Range seeking.
-- MKV and AVI use an ephemeral HLS session. Browser-compatible 8-bit H.264 and
-  AAC are copied unchanged rather than re-encoded.
-- HEVC/H.265, H.264 Hi10P/4:2:2/4:4:4, and other incompatible video are
-  remuxed unchanged into fragmented-MP4 HLS when the browser advertises HEVC
-  support. Other browsers receive high-quality H.264 at the source resolution;
-  HDR/PQ/HLG sources are tone-mapped to standards-compliant BT.709 rather than
-  carrying invalid HDR signaling into an 8-bit stream. The hardware encoder
-  uses a resolution-scaled 8–45 Mbps target without speed-priority mode; the
-  software fallback uses x264 CRF 18. Incompatible audio is converted to
-  512 kbps AAC while preserving the source channel layout.
-- Multiple audio tracks can be selected during HLS playback. Text subtitles
-  (including SRT, ASS/SSA, mov_text, and WebVTT) are converted to WebVTT only
-  when selected. Conversion seeks directly to an overlapping window around the
-  current position, caches it under `data/movie-subtitles`, and retimes it after
-  HLS seeks; image-based subtitles such as PGS are not exposed.
-- HLS uses short four-second segments, builds an approximately 12-second
-  startup cushion, and keeps up to about 45 seconds queued ahead in the browser.
-  A single active server transcode session prevents competing conversions.
-- Seeking beyond generated HLS data restarts FFmpeg at the requested position.
-- HLS scratch data is stored in the operating-system temp directory and removed
-  when idle or when playback closes. Whole converted movies are not retained.
-- Thumbnails are generated only when visible movie cards request them, then
-  cached under `data/movie-thumbnails`.
-
-The movie pipeline takes architectural inspiration from
-[Retlix](https://github.com/simoncena/retlix), adapted for local-drive files
-without IPTV, providers, remote metadata, accounts, or live television.
 
 ---
 
@@ -227,128 +219,153 @@ without IPTV, providers, remote metadata, accounts, or live television.
 | Shortcut | Action |
 |---|---|
 | `Space` | Play / Pause |
-| `←` / `→` | Seek −/+ 10s |
+| `←` / `→` | Seek −/+ 10 seconds |
 | `Shift` + `←` / `→` | Previous / Next track |
 | `↑` / `↓` | Volume up / down |
 | `M` | Mute / Unmute |
 | `S` | Toggle shuffle |
 | `R` | Cycle repeat (off → all → one) |
-| `Q` | Toggle queue |
+| `Q` | Toggle queue panel |
 | `/` | Focus search |
-| `Cmd`/`Ctrl` + `K` | Command palette |
-| `Esc` | Close panels / blur |
+| `Cmd` / `Ctrl` + `K` | Open command palette |
+| `Esc` | Close panels / blur input |
 
-Shortcuts are ignored while typing in inputs.
+Shortcuts are ignored while you're typing in an input.
+
+---
+
+## 🎵 Supported formats
+
+Audio: `mp3`, `flac`, `wav`, `m4a`, `aac`, `ogg`, `opus` (plus `oga`, `weba`,
+`wma` on a best-effort basis). Add rare formats with
+`EXTRA_AUDIO_EXTENSIONS`. Music streams as its original bytes when the browser
+supports them. ALAC audio inside `.m4a` is converted losslessly to FLAC on
+first playback and cached under `data/transcodes` — no audio information is
+discarded.
+
+Movies: `mp4`, `m4v`, `mkv`, `avi`. See "What it does" above for how the
+playback pipeline decides between direct play and HLS transcoding.
+
+---
+
+## 🔄 Scanning & rescanning
+
+- Walks your music folder recursively, skipping hidden files.
+- **Incremental:** a file is only re-parsed if its size or modification time
+  changed. Subsequent rescans are fast.
+- Files you've deleted are pruned from the cache automatically.
+- Trigger a rescan any time:
+  - In the app: **"Rescan Library"** in the sidebar (live progress).
+  - Via API: `POST /api/rescan`, then poll `GET /api/scan/status`.
 
 ---
 
 ## 🌐 Production / single-port mode
 
-For a single self-hosted port, build the client and let the backend serve it:
+Want one URL, no dev servers? Build the frontend once and let the backend
+serve it:
 
 ```bash
 npm run build      # builds client/ into client/dist
 npm start          # runs the server; serves the SPA at / and the API at /api
 ```
 
-Then open `http://localhost:3000/music` for the independent music player or
-`http://localhost:3000/movie` for the movie library. The root URL redirects to
-music, and older unprefixed links redirect to their new locations. In this mode
-the whole app — both UIs and the API — is served from one origin. It binds to
-loopback by default because there is no account system. To intentionally allow
-LAN access, set `APP_HOST=0.0.0.0` and protect the service with a trusted
-firewall or authenticated reverse proxy.
+Then open:
 
-> Note: in production the server is run via `tsx` (TypeScript is executed
-> on-the-fly). This keeps the setup simple and is fine for personal self-hosted
+- `http://localhost:3000/music` — the music player
+- `http://localhost:3000/movie` — the movie library
+- `http://localhost:3000/book`  — the book library
+
+The root URL redirects to music. By default the server binds to loopback
+(127.0.0.1) because there is no login. For intentional LAN access, set
+`APP_HOST=0.0.0.0` and protect the service with a trusted firewall or reverse
+proxy.
+
+> Note: in production the server runs via `tsx` — TypeScript is executed
+> on-the-fly. This keeps the setup simple and is fine for personal self-hosted
 > use.
+
+---
+
+## 🔌 API reference
+
+All endpoints at `/api/*`. Public IDs are stable SHA-1 hashes — the browser
+never asks for filesystem paths directly.
+
+| Method & path | Description |
+|---|---|
+| `GET /api/health` | Liveness probe. |
+| `GET /api/library/summary` | Counts of tracks/albums/artists/genres + total duration. |
+| `GET /api/tracks` | List tracks. Query: `?sort=title\|artist\|album\|duration\|date_added&order=asc\|desc&page&limit&search&genre`. |
+| `GET /api/albums` | List albums. `?sort=title\|artist\|year\|recently_added&order&page&limit&search`. |
+| `GET /api/albums/recent` | Recently added albums (`?limit`). |
+| `GET /api/albums/:id` | Album detail with ordered tracks. |
+| `GET /api/artists` | List artists. `?order&page&limit&search`. |
+| `GET /api/artists/:id` | Artist detail with albums + tracks. |
+| `GET /api/genres` | All genres with track counts. |
+| `GET /api/search?q=` | Search tracks / albums / artists. |
+| `GET /api/stream/:id` | Stream audio (HTTP `Range` aware). |
+| `GET /api/cover/:id` | Embedded cover art for a track. |
+| `POST /api/rescan` | Trigger a rescan (async). |
+| `GET /api/scan/status` | Current scan progress / last result. |
+
+**Security:** every stream and cover request goes through `resolveWithin()`,
+which rejects absolute paths and any `..` traversal outside
+`MUSIC_LIBRARY_PATH`. The browser physically cannot request arbitrary files.
 
 ---
 
 ## 🧪 Development scripts
 
-Run from the project root:
+Run from the repo root:
 
-| Command | Description |
-|---|---|
-| `npm run dev` | Start backend + frontend together (concurrently) |
-| `npm run build` | Build the client + typecheck the server |
-| `npm start` | Run the production server (serves built client + API) |
-| `npm run typecheck` | Typecheck both workspaces |
-| `npm run lint` | ESLint both workspaces |
-| `npm test` | Run the backend test suite (Vitest) |
+```bash
+npm run dev          # server + client (dev mode)
+npm run build        # build client, typecheck server
+npm start            # run production server (serves built client + API)
+npm run typecheck    # TS check both workspaces
+npm run lint         # ESLint both workspaces
+npm test             # backend test suite (Vitest)
+```
 
-Per-workspace scripts (`npm run <script> -w server` / `-w client`) are also
-available (e.g. `dev`, `test:watch`).
+Per-workspace scripts work too: `npm run <script> -w server` or `-w client`.
 
-### Tests
-
-The backend test suite covers the security-critical and behavior-critical paths:
-secure path resolution (traversal prevention), HTTP Range parsing, key
+The backend test suite covers the security-critical and behavior-critical
+paths: secure path resolution (traversal prevention), HTTP Range parsing, key
 determinism, SQLite aggregation & sort-key whitelisting, the full scanner
-(incremental skip, pruning of deleted files), and the API end-to-end (stream
-206/200/404, cover bytes/404, rescan idempotency).
+(incremental skip, pruning of deleted files), and the API end-to-end
+(stream 206/200/404, cover bytes/404, rescan idempotency).
 
 ```bash
 npm test
 ```
 
 > The scanner/API integration tests generate tiny MP3s with `ffmpeg`, so the
-> suite auto-skips those if `ffmpeg` isn't on your PATH (the pure-logic tests
-> still run).
-
----
-
-## 🔌 API reference
-
-All endpoints are prefixed with `/api`. Public ids are stable SHA-1 hashes; the
-browser never requests filesystem paths directly.
-
-| Method & path | Description |
-|---|---|
-| `GET /api/health` | Liveness probe. |
-| `GET /api/library/summary` | Counts of tracks/albums/artists/genres + total duration + config status. |
-| `GET /api/tracks` | List tracks. `?sort=title\|artist\|album\|duration\|date_added&order=asc\|desc&page&limit&search&genre`. |
-| `GET /api/albums` | List albums. `?sort=title\|artist\|year\|recently_added&order&page&limit&search`. |
-| `GET /api/albums/recent` | Recently added albums (`?limit`). |
-| `GET /api/albums/:id` | Album detail incl. ordered tracks. |
-| `GET /api/artists` | List artists. `?order&page&limit&search`. |
-| `GET /api/artists/:id` | Artist detail incl. albums + tracks. |
-| `GET /api/genres` | All genres with counts. |
-| `GET /api/search?q=` | Search tracks/albums/artists. |
-| `GET /api/stream/:id` | Stream audio (HTTP `Range` aware). |
-| `GET /api/cover/:id` | Embedded cover art for a track. |
-| `POST /api/rescan` | Trigger a rescan (async). |
-| `GET /api/scan/status` | Current scan progress / last result. |
-
-**Security:** every stream/cover request is resolved from a server-side track id
-to a validated relative path through `resolveWithin()`, which rejects absolute
-paths and any `..` traversal outside `MUSIC_LIBRARY_PATH`. The browser cannot
-request arbitrary files.
+> suite auto-skips those if `ffmpeg` isn't on your `PATH` (the pure-logic
+> tests still run).
 
 ---
 
 ## ⚠️ Known limitations
 
 - **Browser codec limits still apply.** Music streams as-is except for lossless
-  ALAC→FLAC compatibility conversion. Movies that the browser cannot decode
-  require the high-quality HLS compatibility path described above.
-- **No gapless playback** — the browser `<audio>` element has a small gap
+  ALAC→FLAC. Movies that the browser can't decode route through the HLS
+  pipeline above.
+- **No gapless playback** — the browser's `<audio>` element has a small gap
   between tracks.
-- **Single library folder.** Point `MUSIC_LIBRARY_PATH` at one root; nested
-  subfolders are scanned. (Symlinks inside the root are followed, but only if
-  they resolve back inside the root.)
-- **Single-user, local-first.** There is intentionally no account system, sync,
-  sharing, or multi-device cloud. Preferences live in each browser's
-  `localStorage`.
+- **One folder per library type.** Set `MUSIC_LIBRARY_PATH` to one root;
+  subfolders are scanned automatically. (Symlinks inside the root are
+  followed only if they resolve back inside the root.)
+- **Single-user, local-first.** No accounts, sync, sharing, or cloud. Your
+  preferences live in each browser's `localStorage`.
 - **PWA icons are placeholders.** Replace `client/public/icon-{192,512}.png`
   with your own for a polished install experience.
 - **Very large libraries** (tens of thousands of albums) may benefit from
-  higher pagination limits or additional DB tuning, but the defaults handle
-  typical personal libraries comfortably.
+  higher pagination limits or additional DB tuning, but defaults handle typical
+  personal libraries comfortably.
 
 ---
 
 ## 📄 License
 
-MIT. Built as a personal, private alternative to streaming-service clients.
+MIT.
