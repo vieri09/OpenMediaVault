@@ -38,7 +38,9 @@ Thumbs.db
 # Claude Code local settings
 .claude/
 
-# AI toolchain local rules / agent context — never commit
+# AI toolchain local rules / agent context — prevent NEW ones from being
+# committed. (The two already tracked at repo root, AGENTS.md and CLAUDE.md,
+# are deliberately left in place until you say otherwise.)
 **/AGENTS.md
 **/CLAUDE.md
 **/GEMINI.md
@@ -52,7 +54,6 @@ Thumbs.db
 .windsurfrules
 .replit.md
 .roo/
-
 
 # misc
 coverage/
