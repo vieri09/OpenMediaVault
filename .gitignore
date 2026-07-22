@@ -38,6 +38,22 @@ Thumbs.db
 # Claude Code local settings
 .claude/
 
+# AI toolchain local rules / agent context — never commit
+**/AGENTS.md
+**/CLAUDE.md
+**/GEMINI.md
+**/CODEX.md
+**/CONVENTIONS.md
+.cursorrules
+.cursor/
+.clinerules
+.aider*
+.continue/
+.windsurfrules
+.replit.md
+.roo/
+
+
 # misc
 coverage/
 .cache/
