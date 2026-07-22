@@ -39,12 +39,6 @@ Thumbs.db
 .claude/
 
 # AI toolchain local rules / agent context — never commit
-# Root-level matches bare filenames; **/ entries cover nested copies.
-/AGENTS.md
-/CLAUDE.md
-/GEMINI.md
-/CODEX.md
-/CONVENTIONS.md
 **/AGENTS.md
 **/CLAUDE.md
 **/GEMINI.md
